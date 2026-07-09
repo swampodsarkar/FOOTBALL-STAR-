@@ -1,7 +1,10 @@
 import type { Club, Fixture, League, LeagueName } from '../types';
 import { createClubFromApiTeam } from '../data/leagues';
 
-const BASE = '/api/football';
+// Hardcoded football-data.org key so the app works without any server/env setup.
+// NOTE: a browser app cannot truly hide a key; this is exposed in the bundle.
+const API_KEY = 'f501f01ef13346538118ac31dcb0d18c';
+const BASE = 'https://api.football-data.org/v4';
 
 export interface SupportedLeague {
   code: string;
@@ -44,11 +47,25 @@ interface FdMatch {
 }
 
 async function fdFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'X-Auth-Token': API_KEY },
+  });
   if (!res.ok) {
     throw new Error(`football-data.org request failed: ${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;
+}
+
+// Fetch real league logos (emblems) from football-data.org in a single call.
+export async function getLeagueLogos(): Promise<Record<string, string>> {
+  const data = await fdFetch<{ competitions: { code: string; emblem?: string | null }[] }>(
+    '/v4/competitions'
+  );
+  const logos: Record<string, string> = {};
+  for (const c of data.competitions) {
+    if (c.code && c.emblem) logos[c.code] = c.emblem;
+  }
+  return logos;
 }
 
 export async function getTeams(code: string): Promise<Club[]> {

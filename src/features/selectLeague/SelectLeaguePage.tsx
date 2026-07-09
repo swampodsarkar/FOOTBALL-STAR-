@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { HiChevronLeft, HiCheck, HiArrowPath } from 'react-icons/hi2';
 import { useGameStore } from '../../stores/gameStore';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Button from '../../components/ui/Button';
-import { SUPPORTED_LEAGUES, buildRealLeague } from '../../services/footballData';
+import { SUPPORTED_LEAGUES, buildRealLeague, getLeagueLogos } from '../../services/footballData';
 import type { LeagueName } from '../../types';
 
 const container = {
@@ -29,6 +29,13 @@ export default function SelectLeaguePage() {
   const [selected, setSelected] = useState<SelectedLeague | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logos, setLogos] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    getLeagueLogos()
+      .then(setLogos)
+      .catch(() => {});
+  }, []);
 
   const handleConfirm = async () => {
     if (!selected || loading) return;
@@ -92,7 +99,16 @@ export default function SelectLeaguePage() {
                 )}
 
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="text-3xl">{league.flag}</span>
+                  {logos[league.code] ? (
+                    <img
+                      src={logos[league.code]}
+                      alt={league.name}
+                      className="w-8 h-8 object-contain"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="text-3xl">{league.flag}</span>
+                  )}
                   <div>
                     <h3 className="font-bold text-white text-lg leading-tight">{league.name}</h3>
                     <p className="text-xs text-gray-500">{league.country}</p>
