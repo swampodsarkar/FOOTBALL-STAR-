@@ -30,3 +30,22 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Environment & API key (security)
+
+The football-data.org key is **server-side only** and is never bundled into the
+browser. The frontend calls `/api/football/*`, which is proxied by:
+
+- `api/football.js` — a Vercel Serverless Function (production)
+- the Vite dev proxy in `vite.config.ts` (local `npm run dev`)
+
+Create a local `.env` (gitignored) from `.env.example`:
+
+```
+FOOTBALL_DATA_API_KEY=your_key_here
+```
+
+On Vercel, add the **Environment Variable** `FOOTBALL_DATA_API_KEY` (no `VITE_`
+prefix) in the project settings. Because the key lives only on the server,
+users cannot read it from the deployed app.
+

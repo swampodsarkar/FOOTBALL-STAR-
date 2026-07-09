@@ -1,8 +1,7 @@
 import type { Club, Fixture, League, LeagueName } from '../types';
 import { createClubFromApiTeam } from '../data/leagues';
 
-const API_KEY = import.meta.env.VITE_FOOTBALL_DATA_API_KEY;
-const BASE = 'https://api.football-data.org/v4';
+const BASE = '/api/football';
 
 export interface SupportedLeague {
   code: string;
@@ -45,9 +44,7 @@ interface FdMatch {
 }
 
 async function fdFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'X-Auth-Token': API_KEY ?? '' },
-  });
+  const res = await fetch(`${BASE}${path}`);
   if (!res.ok) {
     throw new Error(`football-data.org request failed: ${res.status} ${res.statusText}`);
   }
