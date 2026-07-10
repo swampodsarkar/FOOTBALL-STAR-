@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiMicrophone, HiCalendarDays, HiCheck, HiArrowLeft } from 'react-icons/hi2';
 import { useGameStore } from '../../stores/gameStore';
@@ -6,6 +6,7 @@ import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import PageTransition from '../../components/layout/PageTransition';
 import { generatePreMatchQuestions, generatePostMatchQuestions, applyPressConferenceEffects, type PressQuestion, type PressConferenceResult } from '../../services/pressService';
 
@@ -18,20 +19,41 @@ export default function PressConferencePage() {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [answers, setAnswers] = useState<{ question: string; chosenAnswer: string; response: string }[]>([]);
   const [finished, setFinished] = useState(false);
+  const [questions, setQuestions] = useState<PressQuestion[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const questions = useMemo(() => {
-    if (!player) return [];
-    if (nextMatch) {
-      return generatePreMatchQuestions(nextMatch.opponent, player.form);
-    }
-    const lastMatch = player.matchHistory[player.matchHistory.length - 1];
-    if (lastMatch) {
-      return generatePostMatchQuestions(lastMatch.result as 'Win' | 'Draw' | 'Loss', lastMatch, lastMatch.opponent);
-    }
-    return [];
+  useEffect(() => {
+    if (!player) return;
+    setLoading(true);
+    (async () => {
+      if (nextMatch) {
+        const qs = await generatePreMatchQuestions(nextMatch.opponent, player.form);
+        setQuestions(qs);
+      } else {
+        const lastMatch = player.matchHistory[player.matchHistory.length - 1];
+        if (lastMatch) {
+          const qs = await generatePostMatchQuestions(lastMatch.result as 'Win' | 'Draw' | 'Loss', lastMatch, lastMatch.opponent);
+          setQuestions(qs);
+        } else {
+          setQuestions([]);
+        }
+      }
+      setLoading(false);
+    })();
   }, [player, nextMatch]);
 
   if (!player) return null;
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="min-h-[60vh] flex flex-col items-center justify-center">
+          <LoadingSpinner size="lg" label="Preparing press questions..." className="mb-4" />
+          <p className="text-sm text-gray-600">AI generating context-aware questions...</p>
+        </div>
+      </PageTransition>
+    );
+  }
 
   const currentQuestion = questions[currentQIndex];
   const isPreMatch = !!nextMatch;

@@ -16,6 +16,7 @@ import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import PageTransition from '../../components/layout/PageTransition';
+import { generateSocialPost, generateFanComments, generateTrendingTopics } from '../../services/groqService';
 
 function formatFollowers(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -23,7 +24,7 @@ function formatFollowers(count: number): string {
   return count.toString();
 }
 
-const postTemplates = [
+const fallbackPostTemplates = [
   'Great win today! ⚽',
   'Hard work in training pays off 💪',
   'Happy to help the team',
@@ -40,7 +41,7 @@ const postTemplates = [
   'Onwards and upwards ⬆️',
 ];
 
-const trendingTopics = [
+const fallbackTrendingTopics = [
   { topic: '#TransferRumours', engagement: 45200 },
   { topic: '#TitleRace', engagement: 38900 },
   { topic: '#ManagerSackWatch', engagement: 31500 },
@@ -48,7 +49,7 @@ const trendingTopics = [
   { topic: '#DerbyDay', engagement: 22100 },
 ];
 
-const positiveComments = [
+const fallbackPositiveComments = [
   'What a player! 🔥',
   'Absolute legend! 👑',
   'Best in the league! ⭐',
@@ -59,7 +60,7 @@ const positiveComments = [
   'Future Ballon d\'Or 🏅',
 ];
 
-const negativeComments = [
+const fallbackNegativeComments = [
   'Needs to step up',
   'Not good enough lately',
   'Time to prove yourself',
@@ -80,20 +81,42 @@ interface Post {
 export default function SocialPage() {
   const player = useGameStore((s) => s.player);
   const updatePlayer = useGameStore((s) => s.updatePlayer);
-  const [feed, setFeed] = useState<Post[]>(() => generateInitialPosts());
+  const [feed, setFeed] = useState<Post[]>([]);
+  const [groqPosts, setGroqPosts] = useState<string[]>([]);
+  const [groqComments, setGroqComments] = useState<{ text: string; isPositive: boolean }[]>([]);
+  const [groqTrending, setGroqTrending] = useState<{ topic: string; engagement: number }[]>([]);
+  const [groqLoaded, setGroqLoaded] = useState(false);
 
-  function generateInitialPosts(): Post[] {
-    if (!player) return [];
-    const baseLikes = Math.floor(player.popularity * 150) + 500;
-    const baseEng = player.popularity;
-    return postTemplates.slice(0, 6).map((content, i) => ({
-      id: `post-${i}`,
-      content,
-      likes: Math.floor(baseLikes * (0.5 + Math.random() * 0.5)),
-      comments: Math.floor(Math.random() * 80) + 10,
-      engagement: Math.min(100, baseEng + Math.floor(Math.random() * 20 - 10)),
-      type: i % 3 === 0 ? 'performance' : i % 3 === 1 ? 'personal' : 'fan',
-    }));
+  const lastMatchResult = player?.matchHistory[player.matchHistory.length - 1];
+  const recentForm = player?.matchHistory.slice(-3) ?? [];
+  const recentWins = recentForm.filter((m) => m.result === 'Win').length;
+
+  if (!groqLoaded) {
+    setGroqLoaded(true);
+    const context = player ? `player ${player.name}, position ${player.position}, recent form: ${recentWins}/3 wins, last match rating: ${lastMatchResult?.rating ?? 'N/A'}` : 'general';
+
+    generateSocialPost(`${context}, post about recent match`).then((p) => {
+      if (p) setGroqPosts((prev) => [...prev, p]);
+    });
+    generateSocialPost(`${context}, post about training`).then((p) => {
+      if (p) setGroqPosts((prev) => [...prev, p]);
+    });
+    generateSocialPost(`${context}, thank fans message`).then((p) => {
+      if (p) setGroqPosts((prev) => [...prev, p]);
+    });
+
+    if (player) {
+      generateFanComments(player.name, 'positive', 4).then((comments) => {
+        if (comments) setGroqComments((prev) => [...prev, ...comments.map((t) => ({ text: t, isPositive: true }))]);
+      });
+      generateFanComments(player.name, 'negative', 3).then((comments) => {
+        if (comments) setGroqComments((prev) => [...prev, ...comments.map((t) => ({ text: t, isPositive: false }))]);
+      });
+    }
+
+    generateTrendingTopics().then((topics) => {
+      if (topics) setGroqTrending(topics.map((t) => ({ topic: t, engagement: Math.floor(Math.random() * 50000) + 10000 })));
+    });
   }
 
   const weeklyChange = useMemo(() => {
@@ -116,6 +139,7 @@ export default function SocialPage() {
     : 'medium';
 
   const fanComments = useMemo(() => {
+    if (groqComments.length > 0) return groqComments;
     if (!player) return [];
     const count = 4 + Math.floor(Math.random() * 3);
     const positiveRatio = formLevel === 'high' ? 0.8 : formLevel === 'medium' ? 0.5 : 0.2;
@@ -124,13 +148,35 @@ export default function SocialPage() {
       return {
         id: `comment-${i}`,
         text: isPositive
-          ? positiveComments[Math.floor(Math.random() * positiveComments.length)]
-          : negativeComments[Math.floor(Math.random() * negativeComments.length)],
+          ? fallbackPositiveComments[Math.floor(Math.random() * fallbackPositiveComments.length)]
+          : fallbackNegativeComments[Math.floor(Math.random() * fallbackNegativeComments.length)],
         isPositive,
         likes: Math.floor(Math.random() * 200) + 20,
       };
     });
-  }, [formLevel, player?.matchHistory.length]);
+  }, [formLevel, player?.matchHistory.length, groqComments]);
+
+  const displayFeed = useMemo(() => {
+    if (feed.length > 0) return feed;
+    if (!player) return [];
+    const baseLikes = Math.floor(player.popularity * 150) + 500;
+    const baseEng = player.popularity;
+    const groqContents = groqPosts.length >= 3 ? groqPosts : [];
+    const templates = groqContents.length >= 3 ? groqContents : fallbackPostTemplates;
+    return templates.slice(0, 6).map((content, i) => ({
+      id: `post-${i}`,
+      content,
+      likes: Math.floor(baseLikes * (0.5 + Math.random() * 0.5)),
+      comments: Math.floor(Math.random() * 80) + 10,
+      engagement: Math.min(100, baseEng + Math.floor(Math.random() * 20 - 10)),
+      type: i % 3 === 0 ? 'performance' : i % 3 === 1 ? 'personal' : 'fan',
+    }));
+  }, [player, feed, groqPosts]);
+
+  const trendingTopics = useMemo(() => {
+    if (groqTrending.length > 0) return groqTrending;
+    return fallbackTrendingTopics;
+  }, [groqTrending]);
 
   const positiveCount = fanComments.filter((c) => c.isPositive).length;
   const sentimentRatio = fanComments.length > 0
@@ -139,21 +185,27 @@ export default function SocialPage() {
 
   const handlePostUpdate = useCallback(() => {
     if (!player) return;
-    const newPost: Post = {
-      id: `post-${Date.now()}`,
-      content: postTemplates[Math.floor(Math.random() * postTemplates.length)],
-      likes: Math.floor(Math.random() * 1000) + 100,
-      comments: Math.floor(Math.random() * 50) + 5,
-      engagement: Math.floor(Math.random() * 30) + 40,
-      type: 'personal',
-    };
-    setFeed((prev) => [newPost, ...prev]);
+
+    const context = `player ${player.name}, position ${player.position}, recent form: ${recentWins}/3 wins`;
+    generateSocialPost(`${context}, personal update`).then((groqContent) => {
+      const content = groqContent || fallbackPostTemplates[Math.floor(Math.random() * fallbackPostTemplates.length)];
+      const newPost: Post = {
+        id: `post-${Date.now()}`,
+        content,
+        likes: Math.floor(Math.random() * 1000) + 100,
+        comments: Math.floor(Math.random() * 50) + 5,
+        engagement: Math.floor(Math.random() * 30) + 40,
+        type: 'personal',
+      };
+      setFeed((prev) => [newPost, ...prev]);
+    });
+
     const popChange = Math.min(5, Math.max(-5, Math.floor(Math.random() * 6 + 2)));
     updatePlayer({
       popularity: Math.min(100, (player.popularity ?? 50) + popChange),
       socialFollowers: (player.socialFollowers ?? 1000) + Math.floor(Math.random() * 500 + 100),
     });
-  }, [player, updatePlayer]);
+  }, [player, updatePlayer, recentWins]);
 
   if (!player) return null;
 

@@ -1,4 +1,5 @@
 import type { Player, MatchPerformance } from '../types';
+import { generatePressQuestions as groqPressQuestions } from './groqService';
 
 export interface PressQuestion {
   id: string;
@@ -28,7 +29,33 @@ function clamp(val: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, val));
 }
 
-export function generatePreMatchQuestions(opponent: string, playerForm: number, matchImportance: string = 'league'): PressQuestion[] {
+function parseEffect(text: string, effectStr: string): number {
+  const match = text.match(new RegExp(`\\[${effectStr}([+-]\\d+)\\]`));
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function stripEffects(text: string): string {
+  return text.replace(/\[(morale|pop|trust)[+-]?\d+\]/g, '').trim();
+}
+
+export async function generatePreMatchQuestions(opponent: string, playerForm: number, matchImportance: string = 'league'): Promise<PressQuestion[]> {
+  const groqResult = await groqPressQuestions(`Pre-match press conference before facing ${opponent}. Player form: ${playerForm}%. Match: ${matchImportance}.`);
+  if (groqResult && groqResult.length >= 2) {
+    return groqResult.slice(0, 3).map((q, i) => ({
+      id: `groq-pre-${i}`,
+      question: q.question,
+      context: 'AI-generated pre-match question',
+      answers: q.answers.map((a, j) => ({
+        text: stripEffects(a.text),
+        moraleEffect: parseEffect(a.text, 'morale') || (j === 0 ? 3 : j === 1 ? 1 : -3),
+        popularityEffect: parseEffect(a.text, 'pop') || (j === 0 ? 2 : j === 1 ? 1 : -2),
+        managerTrustEffect: parseEffect(a.text, 'trust') || (j === 0 ? 3 : j === 1 ? 2 : -3),
+        confidenceEffect: parseEffect(a.text, 'morale') || (j === 0 ? 3 : j === 1 ? 1 : -3),
+        response: j === 0 ? 'A confident answer that pleases the room.' : j === 1 ? 'A measured response.' : 'A risky admission.',
+      })),
+    }));
+  }
+
   const questions: PressQuestion[] = [];
 
   questions.push({
@@ -47,7 +74,7 @@ export function generatePreMatchQuestions(opponent: string, playerForm: number, 
     question: `There's a lot of expectation on you this season. How do you handle the pressure?`,
     context: 'Pressure and expectations',
     answers: [
-      { text: 'Pressure is a privilege. I thrive on it.', moraleEffect: 5, popularityEffect: 5, managerTrustEffect: 3, confidenceEffect: 5, response: 'Fans love the confidence. The manager nods approvingly.' },
+      { text: 'Pressure is a privilege. I thrive on it.', moraleEffect: 5, popularityEffect: 5, managerTrustEffect: 3, confidenceEffect: 5, response: 'Fans love the confidence.' },
       { text: 'I try not to think about it and just focus on my game.', moraleEffect: 2, popularityEffect: 1, managerTrustEffect: 2, confidenceEffect: 2, response: 'A sensible, grounded response.' },
       { text: 'It\'s been getting to me, if I\'m honest.', moraleEffect: -8, popularityEffect: -5, managerTrustEffect: -3, confidenceEffect: -5, response: 'Admitting doubt — the media have a field day.' },
     ],
@@ -80,7 +107,24 @@ export function generatePreMatchQuestions(opponent: string, playerForm: number, 
   return questions;
 }
 
-export function generatePostMatchQuestions(result: 'Win' | 'Draw' | 'Loss', performance: Partial<MatchPerformance>, opponent: string): PressQuestion[] {
+export async function generatePostMatchQuestions(result: 'Win' | 'Draw' | 'Loss', performance: Partial<MatchPerformance>, opponent: string): Promise<PressQuestion[]> {
+  const groqResult = await groqPressQuestions(`Post-match press conference after a ${result} against ${opponent}. Player scored: ${(performance.goals ?? 0) > 0 ? 'yes' : 'no'}.`);
+  if (groqResult && groqResult.length >= 2) {
+    return groqResult.slice(0, 3).map((q, i) => ({
+      id: `groq-post-${i}`,
+      question: q.question,
+      context: 'AI-generated post-match question',
+      answers: q.answers.map((a, j) => ({
+        text: stripEffects(a.text),
+        moraleEffect: parseEffect(a.text, 'morale') || (result === 'Win' ? [5, 3, -3][j] || 0 : result === 'Loss' ? [-2, -3, -5][j] || 0 : [2, -2, 3][j] || 0),
+        popularityEffect: parseEffect(a.text, 'pop') || (j === 0 ? 2 : j === 1 ? 3 : 1),
+        managerTrustEffect: parseEffect(a.text, 'trust') || (j === 0 ? 3 : j === 1 ? 1 : -3),
+        confidenceEffect: parseEffect(a.text, 'morale') || (j === 0 ? 3 : j === 1 ? 0 : -3),
+        response: j === 0 ? 'A strong answer that resonates.' : j === 1 ? 'A balanced viewpoint.' : 'An honest but risky take.',
+      })),
+    }));
+  }
+
   const questions: PressQuestion[] = [];
 
   if (result === 'Win') {
@@ -101,8 +145,8 @@ export function generatePostMatchQuestions(result: 'Win' | 'Draw' | 'Loss', perf
       context: 'Post-match defeat',
       answers: [
         { text: 'We didn\'t execute our game plan. We\'ll learn from this.', moraleEffect: -2, popularityEffect: 1, managerTrustEffect: 3, confidenceEffect: -3, response: 'Accountable — the manager appreciates the honesty.' },
-        { text: 'We were unlucky. The better team didn\'t win today.', moraleEffect: -3, popularityEffect: -3, managerTrustEffect: -5, confidenceEffect: -2, response: 'Sounds like making excuses. Fans aren\'t impressed.' },
-        { text: 'I take responsibility. I need to be better.', moraleEffect: -5, popularityEffect: 5, managerTrustEffect: 5, confidenceEffect: -5, response: 'Taking the blame earns respect from fans and manager.' },
+        { text: 'We were unlucky. The better team didn\'t win today.', moraleEffect: -3, popularityEffect: -3, managerTrustEffect: -5, confidenceEffect: -2, response: 'Sounds like making excuses.' },
+        { text: 'I take responsibility. I need to be better.', moraleEffect: -5, popularityEffect: 5, managerTrustEffect: 5, confidenceEffect: -5, response: 'Taking the blame earns respect.' },
       ],
     });
   } else {
@@ -112,7 +156,7 @@ export function generatePostMatchQuestions(result: 'Win' | 'Draw' | 'Loss', perf
       context: 'Post-match draw',
       answers: [
         { text: 'We wanted all three, but a point keeps us moving.', moraleEffect: 2, popularityEffect: 1, managerTrustEffect: 3, confidenceEffect: 2, response: 'A balanced take on the result.' },
-        { text: 'We dominated and should have won. Frustrating.', moraleEffect: -2, popularityEffect: 0, managerTrustEffect: -2, confidenceEffect: 2, response: 'Honest frustration — fans agree.' },
+        { text: 'We dominated and should have won. Frustrating.', moraleEffect: -2, popularityEffect: 0, managerTrustEffect: -2, confidenceEffect: 2, response: 'Honest frustration.' },
         { text: 'The lads fought hard. We build on this.', moraleEffect: 3, popularityEffect: 2, managerTrustEffect: 3, confidenceEffect: 3, response: 'Positive outlook — good for team spirit.' },
       ],
     });
@@ -126,7 +170,7 @@ export function generatePostMatchQuestions(result: 'Win' | 'Draw' | 'Loss', perf
       answers: [
         { text: 'It\'s always special to score. Most importantly, I helped the team.', moraleEffect: 5, popularityEffect: 3, managerTrustEffect: 3, confidenceEffect: 5, response: 'A perfect balance of personal joy and team focus.' },
         { text: 'I\'ve been working on finishing in training, and it paid off.', moraleEffect: 3, popularityEffect: 2, managerTrustEffect: 5, confidenceEffect: 3, response: 'The manager loves hearing training pays off.' },
-        { text: 'That was for the fans — they deserve it.', moraleEffect: 2, popularityEffect: 8, managerTrustEffect: 2, confidenceEffect: 2, response: 'Fan favorite quote! Social media blows up.' },
+        { text: 'That was for the fans — they deserve it.', moraleEffect: 2, popularityEffect: 8, managerTrustEffect: 2, confidenceEffect: 2, response: 'Fan favorite quote!' },
       ],
     });
   }

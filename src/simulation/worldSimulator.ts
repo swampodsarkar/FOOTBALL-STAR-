@@ -1,4 +1,5 @@
 import type { AIPlayer, Club, League, LeagueTableEntry, NewsArticle, Injury } from '../types';
+import { generateNewsArticle } from '../services/groqService';
 
 let newsIdCounter = 0;
 
@@ -229,11 +230,11 @@ export function recordMatchResult(
   applyMatchResult(homeEntry, awayEntry, homeClub, awayClub, homeGoals, awayGoals);
 }
 
-export function simulateWorldWeek(leagues: League[], currentSeason: number, currentWeek: number): void {
+export async function simulateWorldWeek(leagues: League[], currentSeason: number, currentWeek: number): Promise<void> {
   for (const league of leagues) {
     simulateLeagueRound(league, currentWeek);
   }
-  generateWorldNews(leagues, currentWeek, currentSeason);
+  await generateWorldNews(leagues, currentWeek, currentSeason);
 }
 
 export function getLeagueTable(leagueName: string): LeagueTableEntry[] {
@@ -276,7 +277,7 @@ export function getLeagueTopCleanSheets(league: League, count = 5): { name: stri
   return topSquadPlayers(league, 'cleanSheets', count).map((p) => ({ name: p.name, cleanSheets: p.value, club: p.club }));
 }
 
-export function generateWorldNews(leagues: League[], week: number, season: number): NewsArticle[] {
+export async function generateWorldNews(leagues: League[], week: number, season: number): Promise<NewsArticle[]> {
   const articles: NewsArticle[] = [];
 
   for (const league of leagues) {
@@ -325,7 +326,13 @@ export function generateWorldNews(leagues: League[], week: number, season: numbe
         const potentialClub = pick(leagues.flatMap(l => l.clubs).filter(c => c.id !== club.id));
         if (potentialClub) {
           const fee = randInt(10, 150);
-          articles.push(createArticle(week, season, 'Transfer', `${player.name} linked with ${potentialClub.name} for $${fee}M.`, 5));
+          const groqArticle = await generateNewsArticle(`transfer rumor: ${player.name} from ${club.name} linked with ${potentialClub.name} for $${fee}M`);
+          if (groqArticle) {
+            articles.push(createArticle(week, season, 'Transfer', groqArticle.headline, 5));
+            if (groqArticle.body) articles[articles.length - 1].body = groqArticle.body;
+          } else {
+            articles.push(createArticle(week, season, 'Transfer', `${player.name} linked with ${potentialClub.name} for $${fee}M.`, 5));
+          }
         }
       }
     }
@@ -336,14 +343,27 @@ export function generateWorldNews(leagues: League[], week: number, season: numbe
       if (player) {
         const inj = generateInjuryForAI();
         if (inj) {
-          articles.push(createArticle(week, season, 'Injury', `${player.name} out for ${inj.weeksRemaining} weeks with ${inj.description}.`, 6));
+          const groqArticle = await generateNewsArticle(`injury update: ${player.name} out for ${inj.weeksRemaining} weeks with ${inj.type} ${inj.bodyPart} injury`);
+          if (groqArticle) {
+            articles.push(createArticle(week, season, 'Injury', groqArticle.headline, 6));
+            if (groqArticle.body) articles[articles.length - 1].body = groqArticle.body;
+          } else {
+            articles.push(createArticle(week, season, 'Injury', `${player.name} out for ${inj.weeksRemaining} weeks with ${inj.description}.`, 6));
+          }
         }
       }
     }
 
-    if (Math.random() < 0.03 && week > 10) {
-      const transfer = pick(['breaking transfer record', 'signing sensational midfielder', 'complete defender signing', 'secure wonderkid']);
-      articles.push(createArticle(week, season, 'Transfer', `Big money move: ${pick(league.clubs).name} ${transfer}.`, 6));
+    if (Math.random() < 0.04 && week > 10) {
+      const club = pick(league.clubs);
+      const type = pick(['breaking transfer record', 'sensational signing', 'defensive reinforcement', 'wonderkid arrival']);
+      const groqArticle = await generateNewsArticle(`big money: ${club.name} completes a ${type}`);
+      if (groqArticle) {
+        articles.push(createArticle(week, season, 'Transfer', groqArticle.headline, 6));
+        if (groqArticle.body) articles[articles.length - 1].body = groqArticle.body;
+      } else {
+        articles.push(createArticle(week, season, 'Transfer', `Big money move: ${club.name} ${type}.`, 6));
+      }
     }
   }
 
