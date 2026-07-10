@@ -14,6 +14,7 @@ import { useMatchStore } from '../../stores/matchStore';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import ProgressBar from '../../components/ui/ProgressBar';
+import Button from '../../components/ui/Button';
 import PageTransition from '../../components/layout/PageTransition';
 import {
   playerRelevantAttribute,
@@ -75,6 +76,8 @@ const COMMENTARY_POOL = {
     '{p} looks up and spots a run...',
     'The ball comes to {p} on the edge of the box...',
     '{p} cuts inside onto their stronger foot...',
+    '{p} shows great footwork to beat the defender!',
+    '{p} charges into the final third...',
   ],
   chance: [
     'What a chance! Saved brilliantly!',
@@ -83,6 +86,8 @@ const COMMENTARY_POOL = {
     'Great save! The keeper tips it around the post!',
     '{p} should have scored there!',
     'A wonderful diving save!',
+    'The keeper denies {p} with a strong hand!',
+    'A goal-line clearance! Incredible!',
   ],
   goal: [
     'GOAL! What a strike from {p}!',
@@ -90,16 +95,30 @@ const COMMENTARY_POOL = {
     'GOAL! Incredible finish from {p}!',
     'GOAL! {p} slots it home calmly!',
     'GOAL! A header from {p}! Unstoppable!',
+    'GOAL! {p} curls it into the top corner!',
+    'GOAL! A deflected shot falls kindly for {p}!',
   ],
   defense: [
     '{p} makes a crucial tackle!',
     '{p} reads the play perfectly and intercepts!',
     'A well-timed challenge from {p}!',
     '{p} clears the danger!',
+    '{p} puts the ball out for a throw under pressure.',
+    '{p} tracks back brilliantly!',
   ],
   card: [
     'Yellow card! {p} goes into the book.',
     'Red card! {p} is sent off!',
+  ],
+  foul: [
+    'Foul! {p} penalized for a late challenge.',
+    'Free kick awarded after {p} is brought down.',
+    'A tactical foul by {p} stops the attack.',
+  ],
+  corner: [
+    'Corner kick for the attacking side...',
+    'The corner is swung in... cleared!',
+    'Short corner played to {p}...',
   ],
   neutral: [
     'The crowd urges their team forward...',
@@ -107,13 +126,28 @@ const COMMENTARY_POOL = {
     'The tempo has dropped slightly here.',
     'Both teams are well organized defensively.',
     'A tactical battle unfolding in midfield.',
+    'The rain is pouring down, making conditions tricky.',
+    'A lull in play as both sides regroup.',
+    'The keeper takes his time with the goal kick.',
+    'The physio is on the pitch tending to a player.',
+  ],
+  offside: [
+    'The flag goes up! Offside against {p}.',
+    'Tight call — {p} judged offside by a fraction.',
+  ],
+  stat: [
+    '{p} has covered {dist}km so far this half.',
+    'Pass completion for {p}: {acc}% so far.',
   ],
 };
 
 function generateCommentary(playerName: string, category: keyof typeof COMMENTARY_POOL): string {
   const lines = COMMENTARY_POOL[category];
   const line = pick(lines);
-  return line.replace(/{p}/g, playerName);
+  let result = line.replace(/{p}/g, playerName);
+  result = result.replace(/{dist}/g, String((9 + Math.random() * 3).toFixed(1)));
+  result = result.replace(/{acc}/g, String(randInt(75, 95)));
+  return result;
 }
 
 function formatMinute(m: number): string {
@@ -192,6 +226,7 @@ export default function MatchPage() {
     momentum: 50,
     playerRating: BASE_RATING,
   });
+  const [motmAwarded, setMotmAwarded] = useState(false);
 
   const commentaryRef = useRef<HTMLDivElement>(null);
   const matchIntervalRef = useRef<number | null>(null);
@@ -246,7 +281,7 @@ export default function MatchPage() {
     setShowQTE(true);
     qteStartRef.current = performance.now();
 
-    const duration = 2000;
+    const duration = 2500;
     let startPos = -10;
 
     if (qteAnimRef.current) cancelAnimationFrame(qteAnimRef.current);
@@ -332,7 +367,7 @@ export default function MatchPage() {
   useEffect(() => {
     if (!matchState?.isLive) return;
 
-    const speed = 450;
+    const speed = 700;
 
     matchIntervalRef.current = window.setInterval(() => {
       setMatchTime((prev) => {
@@ -348,14 +383,28 @@ export default function MatchPage() {
         }
 
         if (newMinute >= 90) {
-          const stoppage = randInt(1, 4);
+          const stoppage = randInt(1, 5);
           newMinute = 90 + stoppage;
           setIsFullTime(true);
           fullTimeRef.current = true;
           setIsHalfTime(false);
-          setShowResult(true);
           addCommentary('The final whistle goes! Full time!');
           updateMatchState({ isLive: false, isFullTime: true, minute: newMinute });
+          // Compute final rating immediately
+          const isGK = player?.position === 'GK';
+          const result: MatchResult =
+            score.home > score.away ? 'Win' : score.home < score.away ? 'Loss' : 'Draw';
+          const rawEvents = generateMatchEvents(playerGoals, playerAssists, player?.position ?? 'ST', isGK, result);
+          let rating = applyRatingEvents(rawEvents);
+          const motm = determineMOTM(rating, playerGoals, result, player?.name ?? '');
+          if (motm) {
+            rawEvents.push({ type: 'playerOfMatch', count: 1 });
+            rating = applyRatingEvents(rawEvents);
+          }
+          setMotmAwarded(motm);
+          setComputedFinalRating(Math.round(rating * 10) / 10);
+          setComputedFinalLabel(getRatingLabel(Math.round(rating * 10) / 10));
+          setShowResult(true);
           return newMinute;
         }
 
@@ -369,7 +418,7 @@ export default function MatchPage() {
 
         const eventRoll = Math.random();
 
-        if (eventRoll < 0.04) {
+        if (eventRoll < 0.035) {
           const scored = Math.random() < playerTeamScoreProb;
           if (scored) {
             const playerScores = Math.random() < playerGoalShare;
@@ -431,21 +480,26 @@ export default function MatchPage() {
             });
             addCommentary(`Goal for ${nextMatch?.opponent ?? 'Opponent'}... ${player?.name} will be disappointed at the other end.`);
           }
-        } else if (eventRoll < 0.12) {
+        } else if (eventRoll < 0.1) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'chance'));
           setStats((s) => ({
             ...s,
             shots: { ...s.shots, home: s.shots.home + 1 },
             xG: { ...s.xG, home: Math.round((s.xG.home + Math.random() * 0.2) * 10) / 10 },
           }));
-        } else if (eventRoll < 0.15 && !showQTERef.current) {
+        } else if (eventRoll < 0.13 && !showQTERef.current) {
           triggerQTE();
-        } else if (eventRoll < 0.3) {
+        } else if (eventRoll < 0.2) {
+          const cat = pick(['foul', 'corner', 'offside'] as const);
+          addCommentary(generateCommentary(Math.random() < 0.5 ? (player?.name ?? 'Player') : (nextMatch?.opponent ?? 'Opponent'), cat));
+        } else if (eventRoll < 0.35) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'attack'));
-        } else if (eventRoll < 0.4) {
+        } else if (eventRoll < 0.45) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'defense'));
-        } else if (eventRoll < 0.55) {
+        } else if (eventRoll < 0.6) {
           addCommentary(pick(COMMENTARY_POOL.neutral));
+        } else if (eventRoll < 0.65) {
+          addCommentary(generateCommentary(player?.name ?? 'Player', 'stat'));
         }
 
         const momentumShift = (Math.random() - 0.5) * 6;
@@ -487,39 +541,29 @@ export default function MatchPage() {
     const events: RatingEvent[] = [];
     if (goals > 0) {
       events.push({ type: 'goal', count: goals });
-      // match-winner check
       if (matchResult === 'Win' && goals > 0) {
         events.push({ type: 'matchWinnerGoal', count: 1 });
       }
     }
     if (assists > 0) events.push({ type: 'assist', count: assists });
-    // Key passes = roughly assists*2 + a random factor
     const keyPasses = assists * 2 + Math.floor(Math.random() * 3);
     if (keyPasses > 0) events.push({ type: 'keyPass', count: keyPasses });
-    // Big chances = goals + random
     const bigChances = goals + Math.floor(Math.random() * 2);
     if (bigChances > 0) events.push({ type: 'bigChanceCreated', count: bigChances });
-    // Dribbles — attackers dribble more
     const attackingPositions = ['ST', 'CF', 'LW', 'RW', 'CAM', 'LM', 'RM'];
     const dribbles = attackingPositions.includes(pos) ? Math.floor(Math.random() * 6) + 2 : Math.floor(Math.random() * 3);
     if (dribbles > 0) events.push({ type: 'successfulDribble', count: dribbles });
-    // Tackles — defenders more
     const defendingPositions = ['CB', 'LB', 'RB', 'CDM'];
     const tackles = defendingPositions.includes(pos) ? Math.floor(Math.random() * 8) + 4 : Math.floor(Math.random() * 4);
     if (tackles > 0) events.push({ type: 'tackleWon', count: tackles });
-    // Interceptions
     const interceptions = defendingPositions.includes(pos) ? Math.floor(Math.random() * 6) + 3 : Math.floor(Math.random() * 3);
     if (interceptions > 0) events.push({ type: 'interception', count: interceptions });
-    // Clearances — mostly defenders
     const clearances = defendingPositions.includes(pos) ? Math.floor(Math.random() * 10) + 5 : Math.floor(Math.random() * 2);
     if (clearances > 0) events.push({ type: 'clearance', count: clearances });
-    // Pass accuracy bonus
     if (Math.random() > 0.5) events.push({ type: 'accuratePassHigh', count: 1 });
-    // Negative events — small random chance
     if (Math.random() < 0.3) events.push({ type: 'wrongPass', count: Math.floor(Math.random() * 3) + 1 });
     if (Math.random() < 0.2) events.push({ type: 'lostPossession', count: Math.floor(Math.random() * 4) + 1 });
     if (Math.random() < 0.1) events.push({ type: 'missedBigChance', count: 1 });
-    // GK-specific
     if (isGK) {
       const saves = Math.floor(Math.random() * 6) + 2;
       if (saves > 0) events.push({ type: 'save', count: saves });
@@ -527,12 +571,29 @@ export default function MatchPage() {
         events.push({ type: 'cleanSheet', count: 1 });
       }
     }
-    // Defender clean sheet bonus
     if (defendingPositions.includes(pos) && goals === 0 && (matchResult === 'Win' || matchResult === 'Draw')) {
       events.push({ type: 'cleanSheet', count: 1 });
     }
 
     return events;
+  }
+
+  function determineMOTM(rating: number, _goals: number, result: MatchResult, _playerName: string): boolean {
+    // Generate AI player performances for comparison
+    const aiCount = 20 + randInt(0, 6);
+    const aiRatings: number[] = [];
+    for (let i = 0; i < aiCount; i++) {
+      const base = 5.0 + Math.random() * 3.5;
+      const goalBonus = Math.random() < 0.08 ? 0.6 : 0;
+      const assistBonus = Math.random() < 0.1 ? 0.3 : 0;
+      const winBonus = result === 'Win' && Math.random() < 0.3 ? 0.2 : 0;
+      aiRatings.push(clamp(base + goalBonus + assistBonus + winBonus, 3.0, 10.0));
+    }
+    aiRatings.push(rating);
+    aiRatings.sort((a, b) => b - a);
+    // MOTM only if the player is the top performer (or tied for top) AND rating >= 7.5
+    const isTop = aiRatings[0] === rating;
+    return isTop && rating >= 7.5;
   }
 
   useEffect(() => {
@@ -543,25 +604,13 @@ export default function MatchPage() {
           score.home > score.away ? 'Win' : score.home < score.away ? 'Loss' : 'Draw';
 
         const rawEvents = generateMatchEvents(playerGoals, playerAssists, player?.position ?? 'ST', isGK, result);
-        // Add QTE outcome approximations
         const qteEventCount = matchEvents.filter((e) => e.type === 'QTE').length;
         if (qteEventCount > 0) {
           rawEvents.push({ type: 'keyPass', count: Math.min(qteEventCount, 3) });
         }
 
-        // MOTM if rating is high enough — apply after initial calc
-        let rating = applyRatingEvents(rawEvents);
-        const motm = rating >= 8 || (playerGoals > 0 && rating >= 7.5);
-        if (motm) {
-          rawEvents.push({ type: 'playerOfMatch', count: 1 });
-          rating = applyRatingEvents(rawEvents);
-        }
-
-        const finalRating = Math.round(rating * 10) / 10;
-        setComputedFinalRating(finalRating);
-        setComputedFinalLabel(getRatingLabel(finalRating));
         const xpEarned = Math.round(
-          finalRating * 8 +
+          computedFinalRating * 8 +
             (result === 'Win' ? 20 : result === 'Draw' ? 10 : 5) +
             playerGoals * 15 +
             playerAssists * 8
@@ -571,7 +620,7 @@ export default function MatchPage() {
         const p = st.player;
         if (p) {
           const newForm = clamp(
-            p.form + Math.round((finalRating - 7) * 4) + (result === 'Win' ? 3 : result === 'Loss' ? -3 : 0),
+            p.form + Math.round((computedFinalRating - 7) * 4) + (result === 'Win' ? 3 : result === 'Loss' ? -3 : 0),
             0,
             100
           );
@@ -581,7 +630,7 @@ export default function MatchPage() {
             100
           );
           const newManagerTrust = clamp(
-            p.managerTrust + (finalRating >= 7.5 ? 3 : finalRating >= 6.5 ? 1 : -2),
+            p.managerTrust + (computedFinalRating >= 7.5 ? 3 : computedFinalRating >= 6.5 ? 1 : -2),
             0,
             100
           );
@@ -591,7 +640,7 @@ export default function MatchPage() {
             100
           );
           const newPopularity = clamp(
-            p.popularity + (motm ? 3 : result === 'Win' ? 1 : 0) + (playerGoals > 0 ? 1 : 0),
+            p.popularity + (motmAwarded ? 3 : result === 'Win' ? 1 : 0) + (playerGoals > 0 ? 1 : 0),
             0,
             100
           );
@@ -611,8 +660,8 @@ export default function MatchPage() {
             possessionWon: Math.floor(Math.random() * 8),
             distanceCovered: Math.round((9 + Math.random() * 3) * 10) / 10,
             passAccuracy: 75 + Math.floor(Math.random() * 20),
-            rating: finalRating,
-            manOfTheMatch: motm,
+            rating: computedFinalRating,
+            manOfTheMatch: motmAwarded,
             xpEarned,
             minutesPlayed: 90,
           };
@@ -635,7 +684,6 @@ export default function MatchPage() {
           st.updatePlayer(updatedPlayer);
           st.addMatchPerformance(perf);
 
-          // Recalculate market value after match
           const updatedPlayerFull = { ...p, ...updatedPlayer };
           const newMarketValue = calculateMarketValue(updatedPlayerFull as Player);
           const withBonus = processMatchBonus(updatedPlayerFull as Player, perf);
@@ -664,7 +712,7 @@ export default function MatchPage() {
         st.scheduleNextMatch();
         endMatch();
         goTo('home');
-      }, 5000);
+      }, 8000);
     }
     return () => {
       if (advanceRef.current) clearTimeout(advanceRef.current);
@@ -845,8 +893,8 @@ export default function MatchPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Rating</span>
-                      <span className={`font-semibold ${getRatingColor(computedFinalLabel)}`}>
-                        {computedFinalRating.toFixed(1)} — {computedFinalLabel}
+                      <span className={`font-semibold ${computedFinalRating > 0 ? getRatingColor(computedFinalLabel) : 'text-gray-400'}`}>
+                        {computedFinalRating > 0 ? `${computedFinalRating.toFixed(1)} — ${computedFinalLabel}` : 'Calculating...'}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -859,15 +907,19 @@ export default function MatchPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Energy Used</span>
-                      <span className="text-rose-400 font-semibold">{Math.round(player.physical.energy - stats.playerRating * 5)}%</span>
+                      <span className="text-rose-400 font-semibold">{Math.round(player.physical.energy - (computedFinalRating > 0 ? computedFinalRating * 5 : stats.playerRating * 5))}%</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">XP Earned</span>
-                      <span className="text-amber-400 font-semibold">+{Math.round(stats.playerRating * 8 + (score.home > score.away ? 20 : score.home === score.away ? 10 : 5) + playerGoals * 15 + playerAssists * 8)}</span>
+                      <span className="text-amber-400 font-semibold">+{Math.round(
+                        (computedFinalRating > 0 ? computedFinalRating : stats.playerRating) * 8 +
+                        (score.home > score.away ? 20 : score.home < score.away ? 5 : 10) +
+                        playerGoals * 15 + playerAssists * 8
+                      )}</span>
                     </div>
                   </div>
                   <div className="pt-2">
-                    {stats.playerRating >= 8 || (playerGoals > 0 && stats.playerRating >= 7.5) ? (
+                    {motmAwarded ? (
                       <Badge variant="success" icon={<HiStar className="w-3.5 h-3.5" />}>
                         Man of the Match
                       </Badge>
@@ -875,7 +927,9 @@ export default function MatchPage() {
                       <Badge variant="info">Full Time</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-600 mt-4">Auto-advancing in 5 seconds...</p>
+                  <Button variant="primary" onClick={() => goTo('home')}>
+                    Continue
+                  </Button>
                 </div>
               </Card>
             </motion.div>
@@ -946,4 +1000,3 @@ export default function MatchPage() {
     </PageTransition>
   );
 }
-
