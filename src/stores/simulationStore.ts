@@ -12,6 +12,7 @@ import {
   getLeagueTable,
   getLeagueTopScorers,
   resetWorldCache,
+  type SimMatchResult,
 } from '../simulation/worldSimulator';
 
 interface PendingPlayerMatch {
@@ -34,6 +35,7 @@ interface SimulationStoreState {
   worldNews: NewsArticle[];
   transfers: TransferOffer[];
   leagueTables: Record<string, LeagueTableEntry[]>;
+  leagueMatchResults: Record<string, SimMatchResult[]>;
   currentSeasonData: SeasonData;
 }
 
@@ -69,20 +71,24 @@ export const useSimulationStore = create<
   worldNews: [],
   transfers: [],
   leagueTables: {},
+  leagueMatchResults: {},
   currentSeasonData: {} as SeasonData,
 
   loadWorldLeagues: (seasonWeek, league) => {
     set({ isWorldLoading: true });
     try {
       resetWorldCache();
+      const allResults: SimMatchResult[] = [];
       const rounds = Math.max(1, Math.min(seasonWeek, 38));
       for (let r = 0; r < rounds; r++) {
-        simulateLeagueRound(league, r + 1);
+        const results = simulateLeagueRound(league, r + 1);
+        allResults.push(...results);
       }
       set({
         activeLeague: league,
         selectedLeagueName: league.name,
         leagueTables: { [league.name]: getLeagueTable(league.name) },
+        leagueMatchResults: { [league.name]: allResults },
         worldWeek: rounds,
         isWorldLoading: false,
         currentSeasonData: buildSeasonData(league, seasonWeek),
@@ -111,7 +117,7 @@ export const useSimulationStore = create<
   },
 
   simulateWorldWeek: (seasonWeek, currentLeagueName) => {
-    const { activeLeague, pendingPlayerMatch, worldWeek } = get();
+    const { activeLeague, pendingPlayerMatch, worldWeek, leagueMatchResults } = get();
     if (!activeLeague || activeLeague.name !== currentLeagueName) return;
 
     const round = worldWeek + 1;
@@ -120,7 +126,7 @@ export const useSimulationStore = create<
         ? new Set([pendingPlayerMatch.clubId, pendingPlayerMatch.opponentId])
         : undefined;
 
-    simulateLeagueRound(activeLeague, round, skip);
+    const roundResults = simulateLeagueRound(activeLeague, round, skip);
 
     if (pendingPlayerMatch) {
       const playerClub = activeLeague.clubs.find(
@@ -139,11 +145,23 @@ export const useSimulationStore = create<
           ? pendingPlayerMatch.awayGoals
           : pendingPlayerMatch.homeGoals;
         recordMatchResult(activeLeague.name, homeClub, awayClub, hg, ag);
+        roundResults.push({
+          homeTeam: homeClub.name,
+          awayTeam: awayClub.name,
+          homeScore: hg,
+          awayScore: ag,
+          round,
+        });
       }
     }
 
+    const existing = leagueMatchResults[activeLeague.name] ?? [];
     set({
       leagueTables: { [activeLeague.name]: getLeagueTable(activeLeague.name) },
+      leagueMatchResults: {
+        ...leagueMatchResults,
+        [activeLeague.name]: [...existing, ...roundResults],
+      },
       pendingPlayerMatch: null,
       worldWeek: round,
       currentSeasonData: buildSeasonData(activeLeague, seasonWeek),

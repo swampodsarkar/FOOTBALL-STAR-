@@ -62,6 +62,7 @@ export default function LeagueHubPage() {
   const isWorldLoading = useSimulationStore((s) => s.isWorldLoading);
   const leagueTables = useSimulationStore((s) => s.leagueTables);
 
+
   const selectedLeague = activeLeague;
 
   const leagueName = selectedLeague?.name ?? 'Unknown League';
@@ -91,6 +92,8 @@ export default function LeagueHubPage() {
         .slice(0, 6),
     [fixtures, playerClubName]
   );
+
+  const leagueResults = useSimulationStore((s) => s.leagueMatchResults[leagueName] ?? []);
 
   const topScorers = useMemo(
     () => (selectedLeague ? getLeagueTopScorers(selectedLeague, 5) : []),
@@ -422,98 +425,185 @@ export default function LeagueHubPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.2 }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+              className="space-y-3"
             >
-              {player?.matchHistory
-                .slice()
-                .reverse()
-                .slice(0, 10)
-                .map((match, i) => {
-                  const isWin = match.result === 'Win';
-                  const isDraw = match.result === 'Draw';
-                  return (
-                    <motion.div
-                      key={`${match.week}-${match.opponent}`}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.04 }}
-                    >
-                      <Card
-                        className={`border-l-4 ${
-                          isWin
-                            ? 'border-l-emerald-500'
-                            : isDraw
-                              ? 'border-l-amber-500'
-                              : 'border-l-rose-500'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <HiCalendarDays className="w-3 h-3" />
-                              <span>
-                                S{match.season} W{match.week}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-white">
-                                {currentClub?.name ?? 'Your Club'}
-                              </span>
-                              <span className="text-xs text-gray-600">vs</span>
-                              <span className="text-sm text-gray-300">
-                                {match.opponent}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-2xl font-bold text-white">
-                              {match.goals} - {match.assists}
-                            </span>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {match.goals > 0 && (
-                                <span className="text-emerald-400 mr-2">
-                                  {match.goals} goal{match.goals > 1 ? 's' : ''}
-                                </span>
-                              )}
-                              {match.assists > 0 && (
-                                <span className="text-sky-400">
-                                  {match.assists} assist
-                                  {match.assists > 1 ? 's' : ''}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex items-center gap-2 text-xs">
-                          <Badge
-                            variant={
-                              isWin
-                                ? 'success'
-                                : isDraw
-                                  ? 'warning'
-                                  : 'error'
-                            }
+              {/* Player personal matches */}
+              {(player?.matchHistory.length ?? 0) > 0 && (
+                <>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                    Your Matches
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {player!.matchHistory
+                      .slice()
+                      .reverse()
+                      .slice(0, 10)
+                      .map((match, i) => {
+                        const isWin = match.result === 'Win';
+                        const isDraw = match.result === 'Draw';
+                        return (
+                          <motion.div
+                            key={`${match.week}-${match.opponent}`}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: i * 0.04 }}
                           >
-                            {match.result}
-                          </Badge>
-                          <span className="text-gray-500">
-                            Rating: {match.rating.toFixed(1)}
-                          </span>
-                          {match.manOfTheMatch && (
-                            <Badge variant="info">MOTM</Badge>
-                          )}
-                        </div>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
-              {(player?.matchHistory.length ?? 0) === 0 && (
-                <div className="col-span-2">
-                  <Card>
-                    <p className="text-gray-500 text-sm text-center py-4">
-                      No matches played yet
-                    </p>
-                  </Card>
+                            <Card
+                              className={`border-l-4 ${
+                                isWin
+                                  ? 'border-l-emerald-500'
+                                  : isDraw
+                                    ? 'border-l-amber-500'
+                                    : 'border-l-rose-500'
+                              } bg-indigo-600/5`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                                    <HiCalendarDays className="w-3 h-3" />
+                                    <span>
+                                      S{match.season} W{match.week}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-white">
+                                      {currentClub?.name ?? 'Your Club'}
+                                    </span>
+                                    <span className="text-xs text-gray-600">vs</span>
+                                    <span className="text-sm text-gray-300">
+                                      {match.opponent}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-2xl font-bold text-white">
+                                    {match.goals} - {match.assists}
+                                  </span>
+                                  <div className="text-xs text-gray-500 mt-0.5">
+                                    {match.goals > 0 && (
+                                      <span className="text-emerald-400 mr-2">
+                                        {match.goals} goal{match.goals > 1 ? 's' : ''}
+                                      </span>
+                                    )}
+                                    {match.assists > 0 && (
+                                      <span className="text-sky-400">
+                                        {match.assists} assist
+                                        {match.assists > 1 ? 's' : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex items-center gap-2 text-xs">
+                                <Badge
+                                  variant={
+                                    isWin
+                                      ? 'success'
+                                      : isDraw
+                                        ? 'warning'
+                                        : 'error'
+                                  }
+                                >
+                                  {match.result}
+                                </Badge>
+                                <span className="text-gray-500">
+                                  Rating: {match.rating.toFixed(1)}
+                                </span>
+                                {match.manOfTheMatch && (
+                                  <Badge variant="info">MOTM</Badge>
+                                )}
+                              </div>
+                            </Card>
+                          </motion.div>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
+
+              {/* League match results */}
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                League Match Results
+              </h3>
+              {leagueResults.length === 0 ? (
+                <Card>
+                  <p className="text-gray-500 text-sm text-center py-4">
+                    {player?.matchHistory.length === 0
+                      ? 'No matches played yet'
+                      : 'No league results available'}
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {leagueResults
+                    .slice()
+                    .reverse()
+                    .slice(0, 30)
+                    .map((match, i) => {
+                      const isPlayerMatch =
+                        match.homeTeam === playerClubName ||
+                        match.awayTeam === playerClubName;
+                      const isHome = match.homeTeam === playerClubName;
+                      const homeWin = match.homeScore > match.awayScore;
+                      const awayWin = match.awayScore > match.homeScore;
+                      return (
+                        <motion.div
+                          key={`${match.round}-${match.homeTeam}-${match.awayTeam}-${i}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.02 }}
+                        >
+                          <Card
+                            className={`${
+                              isPlayerMatch
+                                ? 'border-l-4 border-l-indigo-500 bg-indigo-600/5'
+                                : ''
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  <HiCalendarDays className="w-3 h-3" />
+                                  <span>Round {match.round}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span
+                                    className={`text-sm font-semibold ${
+                                      isPlayerMatch && isHome
+                                        ? 'text-indigo-300'
+                                        : homeWin
+                                          ? 'text-emerald-400'
+                                          : 'text-white'
+                                    }`}
+                                  >
+                                    {match.homeTeam}
+                                  </span>
+                                  <span className="text-lg font-bold text-white tabular-nums mx-2">
+                                    {match.homeScore} &ndash; {match.awayScore}
+                                  </span>
+                                  <span
+                                    className={`text-sm font-semibold ${
+                                      isPlayerMatch && !isHome
+                                        ? 'text-indigo-300'
+                                        : awayWin
+                                          ? 'text-emerald-400'
+                                          : 'text-white'
+                                    }`}
+                                  >
+                                    {match.awayTeam}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            {isPlayerMatch && (
+                              <div className="mt-2 text-xs text-indigo-400 font-medium">
+                                {isHome ? 'Home' : 'Away'}
+                              </div>
+                            )}
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
                 </div>
               )}
             </motion.div>

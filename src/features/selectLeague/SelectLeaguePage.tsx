@@ -44,7 +44,7 @@ export default function SelectLeaguePage() {
     try {
       const league = await buildRealLeague(selected.code);
       useGameStore.setState({ currentLeague: league });
-      goTo('selectClub');
+      goTo('startOffers');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load league data');
       setLoading(false);

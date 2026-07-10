@@ -165,15 +165,24 @@ function applyMatchResult(
   if (homeGoals === 0) assignCleanSheet(awayClub);
 }
 
+export interface SimMatchResult {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  round: number;
+}
+
 // Simulate one round. The player's club (and its real opponent) are skipped
 // when `skipClubIds` is supplied, so their real result can be applied on top.
+// Returns the list of match results from this round.
 export function simulateLeagueRound(
   league: League,
-  _round: number,
+  round: number,
   skipClubIds?: Set<string>
-): void {
+): SimMatchResult[] {
   const clubs = league.clubs;
-  if (clubs.length < 2) return;
+  if (clubs.length < 2) return [];
 
   const available = skipClubIds
     ? clubs.filter((c) => !skipClubIds.has(c.id))
@@ -184,6 +193,8 @@ export function simulateLeagueRound(
     fixtures.push([shuffled[i], shuffled[i + 1]]);
   }
 
+  const results: SimMatchResult[] = [];
+
   for (const [home, away] of fixtures) {
     const homeStr = getTeamStrength(home) + 3;
     const awayStr = getTeamStrength(away);
@@ -193,7 +204,17 @@ export function simulateLeagueRound(
     const awayEntry = getOrCreateEntry(away, league.name);
 
     applyMatchResult(homeEntry, awayEntry, home, away, result.homeGoals, result.awayGoals);
+
+    results.push({
+      homeTeam: home.name,
+      awayTeam: away.name,
+      homeScore: result.homeGoals,
+      awayScore: result.awayGoals,
+      round,
+    });
   }
+
+  return results;
 }
 
 export function recordMatchResult(

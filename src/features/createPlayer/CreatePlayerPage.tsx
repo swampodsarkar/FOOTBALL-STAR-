@@ -233,7 +233,7 @@ export default function CreatePlayerPage() {
     };
 
     useGameStore.setState({ player });
-    goTo('startOffers');
+    goTo('selectLeague');
   };
 
   const renderStepIndicator = () => (
