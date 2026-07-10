@@ -73,74 +73,18 @@ function getTeamStrength(club: Club): number {
   return squad.reduce((s, p) => s + p.ovr, 0) / squad.length;
 }
 
-export function simulateLeagueWeek(league: League, week: number): void {
-  const clubs = league.clubs;
-  const numClubs = clubs.length;
-  if (numClubs < 2) return;
-
-  const fixtures: [Club, Club][] = [];
-  const shuffled = [...clubs].sort(() => Math.random() - 0.5);
-  for (let i = 0; i < shuffled.length - 1; i += 2) {
-    fixtures.push([shuffled[i], shuffled[i + 1]]);
-  }
-  if (shuffled.length % 2 !== 0 && fixtures.length > 0) {
-    const last = fixtures.pop()!;
-    if (Math.random() < 0.5) {
-      fixtures.push([last[0], shuffled[shuffled.length - 1]]);
-    } else {
-      fixtures.push([last[1], shuffled[shuffled.length - 1]]);
-    }
-  }
-
-  for (const [home, away] of fixtures) {
-    const homeStr = getTeamStrength(home) + 3;
-    const awayStr = getTeamStrength(away);
-    const result = simulateSingleMatch(homeStr, awayStr);
-
-    const homeEntry = getOrCreateEntry(home, league.name, week);
-    const awayEntry = getOrCreateEntry(away, league.name, week);
-
-    homeEntry.played++;
-    awayEntry.played++;
-    homeEntry.goalsFor += result.homeGoals;
-    homeEntry.goalsAgainst += result.awayGoals;
-    awayEntry.goalsFor += result.awayGoals;
-    awayEntry.goalsAgainst += result.homeGoals;
-
-    if (result.homeGoals > result.awayGoals) {
-      homeEntry.won++;
-      homeEntry.points += 3;
-      awayEntry.lost++;
-      homeEntry.form.push('W');
-      awayEntry.form.push('L');
-    } else if (result.homeGoals < result.awayGoals) {
-      awayEntry.won++;
-      awayEntry.points += 3;
-      homeEntry.lost++;
-      homeEntry.form.push('L');
-      awayEntry.form.push('W');
-    } else {
-      homeEntry.drawn++;
-      awayEntry.drawn++;
-      homeEntry.points += 1;
-      awayEntry.points += 1;
-      homeEntry.form.push('D');
-      awayEntry.form.push('D');
-    }
-
-    if (homeEntry.form.length > 5) homeEntry.form.shift();
-    if (awayEntry.form.length > 5) awayEntry.form.shift();
-  }
-}
-
+// Cumulative per-league tables (not per-week) so standings accumulate across rounds.
 const tableCache: Map<string, Map<string, LeagueTableEntry>> = new Map();
 
-function getOrCreateEntry(club: Club, leagueName: string, week: number): LeagueTableEntry {
-  const key = `${leagueName}-${week}`;
-  if (!tableCache.has(key)) {
-    tableCache.set(key, new Map());
+export function resetWorldCache(): void {
+  tableCache.clear();
+}
+
+function getOrCreateEntry(club: Club, leagueName: string): LeagueTableEntry {
+  if (!tableCache.has(leagueName)) {
+    tableCache.set(leagueName, new Map());
   }
-  const cache = tableCache.get(key)!;
+  const cache = tableCache.get(leagueName)!;
   if (!cache.has(club.id)) {
     cache.set(club.id, {
       clubId: club.id,
@@ -152,18 +96,170 @@ function getOrCreateEntry(club: Club, leagueName: string, week: number): LeagueT
   return cache.get(club.id)!;
 }
 
+function assignGoalsToSquad(club: Club, goals: number, assists: number): void {
+  const squad = club.aiSquad || [];
+  if (squad.length === 0) return;
+  const attackers = squad.filter(
+    (p) => p.position === 'ST' || p.position === 'CF' || p.position === 'LW' || p.position === 'RW' || p.position === 'CAM'
+  );
+  const pool = attackers.length > 0 ? attackers : squad;
+  for (let i = 0; i < goals; i++) {
+    const p = pool[Math.floor(Math.random() * pool.length)];
+    p.goals++;
+    p.gamesPlayed++;
+  }
+  for (let i = 0; i < assists; i++) {
+    const p = squad[Math.floor(Math.random() * squad.length)];
+    p.assists++;
+  }
+}
+
+function assignCleanSheet(club: Club): void {
+  const squad = club.aiSquad || [];
+  const gk = squad.find((p) => p.position === 'GK');
+  if (gk) gk.cleanSheets++;
+}
+
+function applyMatchResult(
+  homeEntry: LeagueTableEntry,
+  awayEntry: LeagueTableEntry,
+  homeClub: Club,
+  awayClub: Club,
+  homeGoals: number,
+  awayGoals: number
+): void {
+  homeEntry.played++;
+  awayEntry.played++;
+  homeEntry.goalsFor += homeGoals;
+  homeEntry.goalsAgainst += awayGoals;
+  awayEntry.goalsFor += awayGoals;
+  awayEntry.goalsAgainst += homeGoals;
+
+  if (homeGoals > awayGoals) {
+    homeEntry.won++;
+    homeEntry.points += 3;
+    awayEntry.lost++;
+    homeEntry.form.push('W');
+    awayEntry.form.push('L');
+  } else if (homeGoals < awayGoals) {
+    awayEntry.won++;
+    awayEntry.points += 3;
+    homeEntry.lost++;
+    homeEntry.form.push('L');
+    awayEntry.form.push('W');
+  } else {
+    homeEntry.drawn++;
+    awayEntry.drawn++;
+    homeEntry.points += 1;
+    awayEntry.points += 1;
+    homeEntry.form.push('D');
+    awayEntry.form.push('D');
+  }
+
+  if (homeEntry.form.length > 5) homeEntry.form.shift();
+  if (awayEntry.form.length > 5) awayEntry.form.shift();
+
+  assignGoalsToSquad(homeClub, homeGoals, Math.min(homeGoals, Math.floor(homeGoals / 2)));
+  assignGoalsToSquad(awayClub, awayGoals, Math.min(awayGoals, Math.floor(awayGoals / 2)));
+  if (awayGoals === 0) assignCleanSheet(homeClub);
+  if (homeGoals === 0) assignCleanSheet(awayClub);
+}
+
+// Simulate one round. The player's club (and its real opponent) are skipped
+// when `skipClubIds` is supplied, so their real result can be applied on top.
+export function simulateLeagueRound(
+  league: League,
+  _round: number,
+  skipClubIds?: Set<string>
+): void {
+  const clubs = league.clubs;
+  if (clubs.length < 2) return;
+
+  const available = skipClubIds
+    ? clubs.filter((c) => !skipClubIds.has(c.id))
+    : [...clubs];
+  const shuffled = available.sort(() => Math.random() - 0.5);
+  const fixtures: [Club, Club][] = [];
+  for (let i = 0; i < shuffled.length - 1; i += 2) {
+    fixtures.push([shuffled[i], shuffled[i + 1]]);
+  }
+
+  for (const [home, away] of fixtures) {
+    const homeStr = getTeamStrength(home) + 3;
+    const awayStr = getTeamStrength(away);
+    const result = simulateSingleMatch(homeStr, awayStr);
+
+    const homeEntry = getOrCreateEntry(home, league.name);
+    const awayEntry = getOrCreateEntry(away, league.name);
+
+    applyMatchResult(homeEntry, awayEntry, home, away, result.homeGoals, result.awayGoals);
+  }
+}
+
+export function recordMatchResult(
+  leagueName: string,
+  homeClub: Club,
+  awayClub: Club,
+  homeGoals: number,
+  awayGoals: number
+): void {
+  const homeEntry = getOrCreateEntry(homeClub, leagueName);
+  const awayEntry = getOrCreateEntry(awayClub, leagueName);
+  applyMatchResult(homeEntry, awayEntry, homeClub, awayClub, homeGoals, awayGoals);
+}
+
 export function simulateWorldWeek(leagues: League[], currentSeason: number, currentWeek: number): void {
   for (const league of leagues) {
-    simulateLeagueWeek(league, currentWeek);
+    simulateLeagueRound(league, currentWeek);
   }
   generateWorldNews(leagues, currentWeek, currentSeason);
+}
+
+export function getLeagueTable(leagueName: string): LeagueTableEntry[] {
+  const cache = tableCache.get(leagueName);
+  if (!cache) return [];
+  return getStandings(leagueName, cache);
+}
+
+function topSquadPlayers(
+  league: League,
+  metric: 'goals' | 'assists' | 'cleanSheets' | 'averageRating',
+  count: number
+): { name: string; value: number; club: string }[] {
+  const all: { name: string; value: number; club: string }[] = [];
+  for (const club of league.clubs) {
+    for (const p of club.aiSquad || []) {
+      const value = metric === 'averageRating' ? Math.round(p.averageRating * 10) / 10 : p[metric];
+      if (metric === 'averageRating' ? p.averageRating > 0 : value > 0) {
+        all.push({ name: p.name, value, club: club.name });
+      }
+    }
+  }
+  all.sort((a, b) => b.value - a.value);
+  return all.slice(0, count);
+}
+
+export function getLeagueTopScorers(league: League, count = 5): { name: string; goals: number; club: string }[] {
+  return topSquadPlayers(league, 'goals', count).map((p) => ({ name: p.name, goals: p.value, club: p.club }));
+}
+
+export function getLeagueTopAssists(league: League, count = 5): { name: string; assists: number; club: string }[] {
+  return topSquadPlayers(league, 'assists', count).map((p) => ({ name: p.name, assists: p.value, club: p.club }));
+}
+
+export function getLeagueTopRatings(league: League, count = 5): { name: string; rating: number; club: string }[] {
+  return topSquadPlayers(league, 'averageRating', count).map((p) => ({ name: p.name, rating: p.value, club: p.club }));
+}
+
+export function getLeagueTopCleanSheets(league: League, count = 5): { name: string; cleanSheets: number; club: string }[] {
+  return topSquadPlayers(league, 'cleanSheets', count).map((p) => ({ name: p.name, cleanSheets: p.value, club: p.club }));
 }
 
 export function generateWorldNews(leagues: League[], week: number, season: number): NewsArticle[] {
   const articles: NewsArticle[] = [];
 
   for (const league of leagues) {
-    const standings = getStandings(league.name, tableCache.get(`${league.name}-${week}`) || new Map());
+    const standings = getLeagueTable(league.name);
     if (standings.length === 0) continue;
 
     if (week >= 5 && week <= 38 && Math.random() < 0.15) {

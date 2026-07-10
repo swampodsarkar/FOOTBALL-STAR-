@@ -23,6 +23,7 @@ import {
   resolveQTESkill,
 } from '../../simulation/matchSimulation';
 import type { MatchState, QTEResult, QTEType, MatchPerformance, MatchResult } from '../../types';
+import { useSimulationStore } from '../../stores/simulationStore';
 
 const QTE_TYPES_BY_POSITION: Record<string, QTEType[]> = {
   GK: ['GoalkeeperSave'],
@@ -529,8 +530,22 @@ export default function MatchPage() {
           st.addMatchPerformance(perf);
         }
 
-        st.generateClubOffers();
-        st.advanceWeek();
+          st.generateClubOffers();
+
+          const sim = useSimulationStore.getState();
+          const isHome = matchState?.isPlayerTeam === 'home';
+          const homeGoals = isHome ? score.home : score.away;
+          const awayGoals = isHome ? score.away : score.home;
+          sim.recordPlayerMatch({
+            leagueName: currentLeague?.name ?? '',
+            clubId: currentClub?.id ?? '',
+            opponentName: nextMatch?.opponent ?? '',
+            isHome: isHome,
+            homeGoals,
+            awayGoals,
+          });
+
+          st.advanceWeek();
         st.scheduleNextMatch();
         endMatch();
         goTo('home');

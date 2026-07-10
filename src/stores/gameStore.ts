@@ -12,6 +12,7 @@ import {
   Fixture,
 } from '../types';
 import { buildRealLeague, getPerformanceOffers, type ClubOffer } from '../services/footballData';
+import { useSimulationStore } from './simulationStore';
 
 type GamePhase =
   | 'splash'
@@ -135,6 +136,9 @@ export const useGameStore = create<GameState & GameActions>()(
           inbox: [],
         });
         get().scheduleNextMatch();
+        useSimulationStore
+          .getState()
+          .loadWorldLeagues(1, league.name);
       },
 
       advanceWeek: () => {
@@ -159,6 +163,11 @@ export const useGameStore = create<GameState & GameActions>()(
           seasonWeek: newWeek > 52 ? 1 : newSeasonWeek,
           transferWindow,
         });
+
+        const lg = get().currentLeague;
+        useSimulationStore
+          .getState()
+          .simulateWorldWeek(newSeasonWeek, lg?.name ?? '');
       },
 
       setWeeklyActivities: (activities) => set({ weeklyActivities: activities }),
@@ -219,6 +228,9 @@ export const useGameStore = create<GameState & GameActions>()(
             inbox: data.inbox,
             gamePhase: 'home',
           });
+          useSimulationStore
+            .getState()
+            .loadWorldLeagues(data.seasonWeek, data.currentLeague?.name ?? '');
         }
       },
 

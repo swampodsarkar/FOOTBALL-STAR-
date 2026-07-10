@@ -10,6 +10,13 @@ import {
 } from 'react-icons/hi2';
 import { useGameStore } from '../../stores/gameStore';
 import { useSimulationStore } from '../../stores/simulationStore';
+import {
+  getLeagueTopScorers,
+  getLeagueTopAssists,
+  getLeagueTopRatings,
+  getLeagueTopCleanSheets,
+} from '../../simulation/worldSimulator';
+import { SUPPORTED_LEAGUES } from '../../services/footballData';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import PageTransition from '../../components/layout/PageTransition';
@@ -47,24 +54,69 @@ function FormDot({ result }: { result: string }) {
 
 export default function LeagueHubPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Table');
-  const currentLeague = useGameStore((s) => s.currentLeague);
   const currentClub = useGameStore((s) => s.currentClub);
   const currentSeason = useGameStore((s) => s.currentSeason);
   const player = useGameStore((s) => s.player);
   const seasonWeek = useGameStore((s) => s.seasonWeek);
-  const leagueTables = useSimulationStore((s) => s.leagueTables);
-  const currentSeasonData = useSimulationStore((s) => s.currentSeasonData);
 
-  const leagueName = currentLeague?.name ?? 'Unknown League';
-  const country = currentLeague?.country ?? '';
+  const availableLeagues = useSimulationStore((s) => s.availableLeagues);
+  const selectedLeagueName = useSimulationStore((s) => s.selectedLeagueName);
+  const isWorldLoading = useSimulationStore((s) => s.isWorldLoading);
+  const leagueTables = useSimulationStore((s) => s.leagueTables);
+  const selectLeague = useSimulationStore((s) => s.selectLeague);
+
+  const selectedLeague = useMemo(
+    () => availableLeagues.find((l) => l.name === selectedLeagueName) ?? availableLeagues[0],
+    [availableLeagues, selectedLeagueName]
+  );
+
+  const leagueName = selectedLeague?.name ?? 'Unknown League';
+  const country = selectedLeague?.country ?? '';
   const table: LeagueTableEntry[] = leagueTables[leagueName] ?? [];
+  const fixtures = selectedLeague?.fixtures ?? [];
 
   const playerClubId = currentClub?.id ?? '';
+  const playerClubName = currentClub?.name ?? '';
 
-  const topScorers = useMemo(() => {
-    if (!currentSeasonData?.topScorer) return [];
-    return [currentSeasonData.topScorer];
-  }, [currentSeasonData]);
+  const flagForLeague = (name: string) =>
+    SUPPORTED_LEAGUES.find((l) => l.name === name)?.flag ?? '🏳️';
+
+  const upcomingFixtures = useMemo(
+    () =>
+      [...fixtures]
+        .sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime())
+        .slice(0, 12),
+    [fixtures]
+  );
+
+  const playerFixtures = useMemo(
+    () =>
+      [...fixtures]
+        .filter(
+          (f) =>
+            f.homeTeam.name === playerClubName || f.awayTeam.name === playerClubName
+        )
+        .sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime())
+        .slice(0, 6),
+    [fixtures, playerClubName]
+  );
+
+  const topScorers = useMemo(
+    () => (selectedLeague ? getLeagueTopScorers(selectedLeague, 5) : []),
+    [selectedLeague]
+  );
+  const topAssists = useMemo(
+    () => (selectedLeague ? getLeagueTopAssists(selectedLeague, 5) : []),
+    [selectedLeague]
+  );
+  const topRatings = useMemo(
+    () => (selectedLeague ? getLeagueTopRatings(selectedLeague, 5) : []),
+    [selectedLeague]
+  );
+  const topCleanSheets = useMemo(
+    () => (selectedLeague ? getLeagueTopCleanSheets(selectedLeague, 5) : []),
+    [selectedLeague]
+  );
 
   return (
     <PageTransition>
@@ -92,6 +144,28 @@ export default function LeagueHubPage() {
           </div>
         </motion.div>
 
+        {availableLeagues.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {availableLeagues.map((league) => {
+              const isActive = league.name === leagueName;
+              return (
+                <button
+                  key={league.name}
+                  onClick={() => selectLeague(league.name)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/25'
+                      : 'bg-gray-900 text-gray-400 hover:text-white border border-gray-800'
+                  }`}
+                >
+                  <span>{flagForLeague(league.name)}</span>
+                  <span>{league.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
           {tabs.map((tab) => (
             <button
@@ -107,6 +181,12 @@ export default function LeagueHubPage() {
             </button>
           ))}
         </div>
+
+        {isWorldLoading && (
+          <div className="text-sm text-gray-500 text-center py-4">
+            Loading league world…
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
           {activeTab === 'Table' && (
@@ -142,9 +222,10 @@ export default function LeagueHubPage() {
                         return (
                           <motion.tr
                             key={entry.clubId}
+                            layout
+                            transition={{ type: 'spring', stiffness: 500, damping: 40 }}
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.02 }}
                             className={`border-b border-gray-800/50 transition-colors ${
                               isPlayerClub
                                 ? 'bg-indigo-600/10 border-indigo-500/30'
@@ -245,69 +326,123 @@ export default function LeagueHubPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.2 }}
-              className="space-y-3"
+              className="space-y-4"
             >
-              {[1, 2, 3, 4, 5].map((weekOffset) => {
-                const week = seasonWeek + weekOffset;
-                const isPlayerWeek = week === seasonWeek + 1;
-                const isHome = weekOffset % 2 === 0;
-                const opponent = `Club ${weekOffset}`;
-                return (
-                  <motion.div
-                    key={week}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: weekOffset * 0.05 }}
-                  >
-                    <Card
-                      className={`border-l-4 ${
-                        isPlayerWeek
-                          ? 'border-l-indigo-500 bg-indigo-600/5'
-                          : 'border-l-gray-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-col items-center gap-1">
-                            <span className="text-xs text-gray-500 uppercase">
-                              W{week}
-                            </span>
-                            <HiCalendarDays className="w-4 h-4 text-gray-500" />
+              {playerFixtures.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                    Your Club
+                  </h3>
+                  {playerFixtures.map((f, weekOffset) => {
+                    const isHome = f.homeTeam.name === playerClubName;
+                    return (
+                      <motion.div
+                        key={`player-${f.id}`}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: weekOffset * 0.05 }}
+                      >
+                        <Card className="border-l-4 border-l-indigo-500 bg-indigo-600/5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-xs text-gray-500 uppercase">
+                                  MD{f.matchday ?? '?'}
+                                </span>
+                                <HiCalendarDays className="w-4 h-4 text-gray-500" />
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`font-semibold ${
+                                    isHome ? 'text-white' : 'text-gray-300'
+                                  }`}
+                                >
+                                  {f.homeTeam.name}
+                                </span>
+                                <span className="text-xs text-gray-600">vs</span>
+                                <span
+                                  className={`font-semibold ${
+                                    !isHome ? 'text-white' : 'text-gray-300'
+                                  }`}
+                                >
+                                  {f.awayTeam.name}
+                                </span>
+                              </div>
+                            </div>
+                            <Badge variant="info">{isHome ? 'Home' : 'Away'}</Badge>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`font-semibold ${
-                                isPlayerWeek && isHome
-                                  ? 'text-white'
-                                  : 'text-gray-300'
-                              }`}
-                            >
-                              {isPlayerWeek && isHome
-                                ? currentClub?.name ?? 'Your Club'
-                                : opponent}
-                            </span>
-                            <span className="text-xs text-gray-600">vs</span>
-                            <span
-                              className={`font-semibold ${
-                                isPlayerWeek && !isHome
-                                  ? 'text-white'
-                                  : 'text-gray-300'
-                              }`}
-                            >
-                              {isPlayerWeek && !isHome
-                                ? currentClub?.name ?? 'Your Club'
-                                : opponent}
-                            </span>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                  Upcoming ({leagueName})
+                </h3>
+                {upcomingFixtures.length === 0 && (
+                  <Card>
+                    <p className="text-gray-500 text-sm text-center py-4">
+                      No upcoming fixtures
+                    </p>
+                  </Card>
+                )}
+                {upcomingFixtures.map((f, i) => {
+                  const involvesPlayer =
+                    f.homeTeam.name === playerClubName ||
+                    f.awayTeam.name === playerClubName;
+                  return (
+                    <motion.div
+                      key={f.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                    >
+                      <Card
+                        className={`border-l-4 ${
+                          involvesPlayer
+                            ? 'border-l-indigo-500 bg-indigo-600/5'
+                            : 'border-l-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs text-gray-500 uppercase">
+                                MD{f.matchday ?? '?'}
+                              </span>
+                              <HiCalendarDays className="w-4 h-4 text-gray-500" />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={`font-semibold ${
+                                  f.homeTeam.name === playerClubName
+                                    ? 'text-indigo-300'
+                                    : 'text-white'
+                                }`}
+                              >
+                                {f.homeTeam.name}
+                              </span>
+                              <span className="text-xs text-gray-600">vs</span>
+                              <span
+                                className={`font-semibold ${
+                                  f.awayTeam.name === playerClubName
+                                    ? 'text-indigo-300'
+                                    : 'text-white'
+                                }`}
+                              >
+                                {f.awayTeam.name}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <Badge variant={isPlayerWeek ? 'info' : 'default'}>
-                          {isHome ? 'Home' : 'Away'}
-                        </Badge>
-                      </div>
-                    </Card>
-                  </motion.div>
-                );
-              })}
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
 
@@ -442,16 +577,14 @@ export default function LeagueHubPage() {
                   )}
                   {topScorers.map((scorer, i) => (
                     <div
-                      key={i}
+                      key={`${scorer.name}-${i}`}
                       className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0"
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-gray-500 w-5">
                           {i + 1}
                         </span>
-                        <span className="text-sm text-white">
-                          {scorer.name}
-                        </span>
+                        <span className="text-sm text-white">{scorer.name}</span>
                         <span className="text-xs text-gray-500">
                           ({scorer.club})
                         </span>
@@ -488,7 +621,29 @@ export default function LeagueHubPage() {
                 }
               >
                 <div className="space-y-2">
-                  {player && player.seasonAssists > 0 ? (
+                  {topAssists.length === 0 && (
+                    <p className="text-sm text-gray-500 py-2">
+                      No data available
+                    </p>
+                  )}
+                  {topAssists.map((p, i) => (
+                    <div
+                      key={`${p.name}-${i}`}
+                      className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500 w-5">
+                          {i + 1}
+                        </span>
+                        <span className="text-sm text-white">{p.name}</span>
+                        <span className="text-xs text-gray-500">({p.club})</span>
+                      </div>
+                      <span className="text-sm font-bold text-sky-400">
+                        {p.assists}
+                      </span>
+                    </div>
+                  ))}
+                  {player && player.seasonAssists > 0 && (
                     <div className="flex items-center justify-between py-2 border-b border-gray-800/50 bg-indigo-600/10 px-2 rounded-lg">
                       <div className="flex items-center gap-2">
                         <HiCheckBadge className="w-4 h-4 text-indigo-400" />
@@ -500,10 +655,6 @@ export default function LeagueHubPage() {
                         {player.seasonAssists}
                       </span>
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 py-2">
-                      No data available
-                    </p>
                   )}
                 </div>
               </Card>
@@ -518,7 +669,30 @@ export default function LeagueHubPage() {
                   </div>
                 }
               >
-                <p className="text-sm text-gray-500 py-2">No data available</p>
+                <div className="space-y-2">
+                  {topCleanSheets.length === 0 && (
+                    <p className="text-sm text-gray-500 py-2">
+                      No data available
+                    </p>
+                  )}
+                  {topCleanSheets.map((p, i) => (
+                    <div
+                      key={`${p.name}-${i}`}
+                      className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500 w-5">
+                          {i + 1}
+                        </span>
+                        <span className="text-sm text-white">{p.name}</span>
+                        <span className="text-xs text-gray-500">({p.club})</span>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-400">
+                        {p.cleanSheets}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </Card>
 
               <Card
@@ -532,7 +706,29 @@ export default function LeagueHubPage() {
                 }
               >
                 <div className="space-y-2">
-                  {player && player.matchHistory.length > 0 ? (
+                  {topRatings.length === 0 && (
+                    <p className="text-sm text-gray-500 py-2">
+                      No data available
+                    </p>
+                  )}
+                  {topRatings.map((p, i) => (
+                    <div
+                      key={`${p.name}-${i}`}
+                      className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500 w-5">
+                          {i + 1}
+                        </span>
+                        <span className="text-sm text-white">{p.name}</span>
+                        <span className="text-xs text-gray-500">({p.club})</span>
+                      </div>
+                      <span className="text-sm font-bold text-purple-400">
+                        {p.rating.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                  {player && player.matchHistory.length > 0 && (
                     <div className="flex items-center justify-between py-2 bg-indigo-600/10 px-2 rounded-lg">
                       <div className="flex items-center gap-2">
                         <HiCheckBadge className="w-4 h-4 text-indigo-400" />
@@ -549,10 +745,6 @@ export default function LeagueHubPage() {
                         ).toFixed(1)}
                       </span>
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 py-2">
-                      No data available
-                    </p>
                   )}
                 </div>
               </Card>
