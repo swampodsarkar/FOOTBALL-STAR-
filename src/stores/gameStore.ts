@@ -12,6 +12,7 @@ import {
   Fixture,
 } from '../types';
 import { buildRealLeague, getPerformanceOffers, type ClubOffer } from '../services/footballData';
+import { saveCloud, loadCloud } from '../services/firebase';
 import { useSimulationStore } from './simulationStore';
 
 type GamePhase =
@@ -75,6 +76,7 @@ interface GameActions {
   setLoading: (bool: boolean) => void;
   saveGame: () => void;
   loadGame: (saveId: string) => void;
+  loadFromCloud: () => Promise<void>;
   updatePlayer: (updates: Partial<Player>) => void;
   setNextMatch: (match: {
     opponent: string;
@@ -208,6 +210,30 @@ export const useGameStore = create<GameState & GameActions>()(
           `football-career-save-${state.player?.id ?? 'default'}`,
           JSON.stringify(saveData)
         );
+        saveCloud(saveData);
+      },
+
+      loadFromCloud: async () => {
+        const raw = await loadCloud();
+        if (!raw) return;
+        const data = raw as any;
+        set({
+          player: data.player,
+          currentLeague: data.currentLeague,
+          currentClub: data.currentClub,
+          currentWeek: data.currentWeek,
+          currentSeason: data.currentSeason,
+          seasonWeek: data.seasonWeek,
+          transferWindow: data.transferWindow,
+          weeklyActivities: data.weeklyActivities ?? [],
+          nextMatch: data.nextMatch,
+          matchHistory: data.matchHistory ?? [],
+          inbox: data.inbox ?? [],
+          gamePhase: 'home',
+        });
+        if (data.currentLeague) {
+          useSimulationStore.getState().loadWorldLeagues(data.seasonWeek, data.currentLeague);
+        }
       },
 
       loadGame: (saveId) => {

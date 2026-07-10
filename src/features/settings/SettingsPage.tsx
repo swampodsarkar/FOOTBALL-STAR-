@@ -11,7 +11,13 @@ import {
   HiArrowPath,
   HiInformationCircle,
   HiAdjustmentsHorizontal,
+  HiCloud,
+  HiCheckCircle,
+  HiXMark,
 } from 'react-icons/hi2';
+import { useCloudStore } from '../../stores/cloudStore';
+import { connectWithEmail, disconnectCloud } from '../../services/firebase';
+import { useGameStore } from '../../stores/gameStore';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import PageTransition from '../../components/layout/PageTransition';
@@ -107,6 +113,17 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<GameSettings>(loadSettings);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clearCacheDone, setClearCacheDone] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectMode, setConnectMode] = useState<'create' | 'login'>('create');
+  const [connectEmail, setConnectEmail] = useState('');
+  const [connectPassword, setConnectPassword] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+
+  const cloudStatus = useCloudStore((s) => s.status);
+  const cloudEmail = useCloudStore((s) => s.email);
+  const loadFromCloud = useGameStore((s) => s.loadFromCloud);
 
   useEffect(() => {
     saveSettings(settings);
@@ -372,6 +389,242 @@ export default function SettingsPage() {
               {clearCacheDone ? 'Cache Cleared' : 'Clear Cache'}
             </Button>
           </SettingsSection>
+
+          <SettingsSection title="Cloud Save" icon={HiCloud}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">
+                  {cloudStatus === 'connected'
+                    ? 'Connected'
+                    : cloudStatus === 'guest'
+                      ? 'Guest Mode'
+                      : cloudStatus === 'loading'
+                        ? 'Initializing...'
+                        : 'Disconnected'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {cloudStatus === 'connected'
+                    ? `Signed in as ${cloudEmail ?? 'unknown'}`
+                    : cloudStatus === 'guest'
+                      ? 'Data auto-saves to your device. Connect to sync across devices.'
+                      : 'Cloud save unavailable'}
+                </p>
+              </div>
+              {cloudStatus === 'connected' && (
+                <HiCheckCircle className="w-6 h-6 text-emerald-400 shrink-0" />
+              )}
+            </div>
+
+            {cloudStatus === 'guest' && (
+              <Button
+                variant="secondary"
+                size="md"
+                className="w-full"
+                icon={<HiCloud className="w-4 h-4" />}
+                onClick={() => setShowConnectModal(true)}
+              >
+                Connect to Cloud
+              </Button>
+            )}
+
+            {cloudStatus === 'connected' && (
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setConnectEmail('');
+                    setConnectPassword('');
+                    setConnectError('');
+                    setShowConnectModal(true);
+                  }}
+                >
+                  Sync Save Now
+                </Button>
+                {!showDisconnectConfirm ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowDisconnectConfirm(true)}
+                  >
+                    Disconnect
+                  </Button>
+                ) : (
+                  <div className="flex flex-col gap-2 p-3 bg-rose-900/20 border border-rose-500/30 rounded-lg">
+                    <p className="text-sm text-rose-300 font-medium">
+                      Disconnect from cloud?
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-1 bg-rose-600 from-rose-600 to-rose-700 shadow-rose-600/25"
+                        onClick={async () => {
+                          await disconnectCloud();
+                          setShowDisconnectConfirm(false);
+                        }}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowDisconnectConfirm(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {cloudStatus === 'error' && (
+              <p className="text-xs text-rose-400">
+                Cloud save is not available. Check your connection or Firebase
+                configuration.
+              </p>
+            )}
+          </SettingsSection>
+
+          {/* Connect Modal */}
+          {showConnectModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+              <div className="bg-gray-900 rounded-xl border border-gray-700 p-6 w-full max-w-md space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white">
+                    {cloudStatus === 'connected'
+                      ? 'Sync Save'
+                      : 'Connect to Cloud'}
+                  </h2>
+                  <button
+                    onClick={() => setShowConnectModal(false)}
+                    className="text-gray-500 hover:text-white"
+                  >
+                    <HiXMark className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {cloudStatus !== 'connected' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setConnectMode('create');
+                        setConnectError('');
+                      }}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        connectMode === 'create'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400'
+                      }`}
+                    >
+                      Create Account
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConnectMode('login');
+                        setConnectError('');
+                      }}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        connectMode === 'login'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-800 text-gray-400'
+                      }`}
+                    >
+                      Login
+                    </button>
+                  </div>
+                )}
+
+                {cloudStatus === 'connected' && (
+                  <p className="text-sm text-gray-400">
+                    This will upload your current save to the cloud and replace
+                    the remote version.
+                  </p>
+                )}
+
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={connectEmail}
+                  onChange={(e) => setConnectEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={connectPassword}
+                  onChange={(e) => setConnectPassword(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                />
+
+                {connectError && (
+                  <p className="text-sm text-rose-400">{connectError}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="flex-1"
+                    disabled={connecting || !connectEmail || !connectPassword}
+                    onClick={async () => {
+                      setConnecting(true);
+                      setConnectError('');
+                      try {
+                        if (cloudStatus === 'connected') {
+                          useGameStore.getState().saveGame();
+                          useGameStore.getState().addInboxItem({
+                            id: `cloud-sync-${Date.now()}`,
+                            week: useGameStore.getState().currentWeek,
+                            season: useGameStore.getState().currentSeason,
+                            type: 'System',
+                            headline: 'Cloud save synced',
+                            body: 'Your game data has been uploaded to the cloud.',
+                            importance: 1,
+                            date: new Date().toISOString(),
+                          });
+                        } else {
+                          const result = await connectWithEmail(
+                            connectEmail,
+                            connectPassword,
+                            connectMode,
+                          );
+                          if (result.ok) {
+                            await loadFromCloud();
+                          } else {
+                            setConnectError(result.error ?? 'Failed');
+                            setConnecting(false);
+                            return;
+                          }
+                        }
+                        setShowConnectModal(false);
+                      } finally {
+                        setConnecting(false);
+                      }
+                    }}
+                  >
+                    {connecting
+                      ? 'Connecting...'
+                      : cloudStatus === 'connected'
+                        ? 'Sync'
+                        : connectMode === 'create'
+                          ? 'Create Account'
+                          : 'Login'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => setShowConnectModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <SettingsSection title="About" icon={HiInformationCircle}>
             <div className="space-y-3 text-sm">
