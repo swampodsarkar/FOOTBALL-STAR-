@@ -16,7 +16,6 @@ import {
   getLeagueTopRatings,
   getLeagueTopCleanSheets,
 } from '../../simulation/worldSimulator';
-import { SUPPORTED_LEAGUES } from '../../services/footballData';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import PageTransition from '../../components/layout/PageTransition';
@@ -59,16 +58,11 @@ export default function LeagueHubPage() {
   const player = useGameStore((s) => s.player);
   const seasonWeek = useGameStore((s) => s.seasonWeek);
 
-  const availableLeagues = useSimulationStore((s) => s.availableLeagues);
-  const selectedLeagueName = useSimulationStore((s) => s.selectedLeagueName);
+  const activeLeague = useSimulationStore((s) => s.activeLeague);
   const isWorldLoading = useSimulationStore((s) => s.isWorldLoading);
   const leagueTables = useSimulationStore((s) => s.leagueTables);
-  const selectLeague = useSimulationStore((s) => s.selectLeague);
 
-  const selectedLeague = useMemo(
-    () => availableLeagues.find((l) => l.name === selectedLeagueName) ?? availableLeagues[0],
-    [availableLeagues, selectedLeagueName]
-  );
+  const selectedLeague = activeLeague;
 
   const leagueName = selectedLeague?.name ?? 'Unknown League';
   const country = selectedLeague?.country ?? '';
@@ -77,9 +71,6 @@ export default function LeagueHubPage() {
 
   const playerClubId = currentClub?.id ?? '';
   const playerClubName = currentClub?.name ?? '';
-
-  const flagForLeague = (name: string) =>
-    SUPPORTED_LEAGUES.find((l) => l.name === name)?.flag ?? '🏳️';
 
   const upcomingFixtures = useMemo(
     () =>
@@ -143,28 +134,6 @@ export default function LeagueHubPage() {
             </div>
           </div>
         </motion.div>
-
-        {availableLeagues.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {availableLeagues.map((league) => {
-              const isActive = league.name === leagueName;
-              return (
-                <button
-                  key={league.name}
-                  onClick={() => selectLeague(league.name)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/25'
-                      : 'bg-gray-900 text-gray-400 hover:text-white border border-gray-800'
-                  }`}
-                >
-                  <span>{flagForLeague(league.name)}</span>
-                  <span>{league.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
           {tabs.map((tab) => (

@@ -138,7 +138,7 @@ export const useGameStore = create<GameState & GameActions>()(
         get().scheduleNextMatch();
         useSimulationStore
           .getState()
-          .loadWorldLeagues(1, league.name);
+          .loadWorldLeagues(1, league);
       },
 
       advanceWeek: () => {
@@ -228,9 +228,11 @@ export const useGameStore = create<GameState & GameActions>()(
             inbox: data.inbox,
             gamePhase: 'home',
           });
-          useSimulationStore
-            .getState()
-            .loadWorldLeagues(data.seasonWeek, data.currentLeague?.name ?? '');
+          if (data.currentLeague) {
+            useSimulationStore
+              .getState()
+              .loadWorldLeagues(data.seasonWeek, data.currentLeague);
+          }
         }
       },
 
@@ -290,6 +292,7 @@ export const useGameStore = create<GameState & GameActions>()(
           pendingOffers: state.pendingOffers.filter((o) => o.id !== id),
         }));
         get().scheduleNextMatch();
+        useSimulationStore.getState().loadWorldLeagues(get().seasonWeek, league);
         get().addInboxItem({
           id: `offer-accepted-${offer.club.id}-${Date.now()}`,
           week: get().currentWeek,
