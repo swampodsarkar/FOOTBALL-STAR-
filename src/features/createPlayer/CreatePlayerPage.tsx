@@ -8,6 +8,7 @@ import {
 import { useGameStore } from '../../stores/gameStore';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Button from '../../components/ui/Button';
+import CountryFlag from '../../components/ui/CountryFlag';
 import type {
   Player,
   Position,
@@ -315,7 +316,12 @@ export default function CreatePlayerPage() {
                         : 'text-gray-400 hover:bg-gray-900 hover:text-white'
                     }`}
                   >
-                    <span className="text-lg">{flag}</span>
+                    <CountryFlag
+                      country={country}
+                      emoji={flag}
+                      className="text-lg"
+                      imgClassName="w-5 h-5 rounded-sm object-cover"
+                    />
                     <span>{country}</span>
                   </button>
                 ))}

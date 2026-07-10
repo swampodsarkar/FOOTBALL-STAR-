@@ -22,13 +22,15 @@ interface CountryFlagProps {
   country: string;
   emoji?: string;
   className?: string;
+  imgClassName?: string;
   fallback?: ReactNode;
 }
 
 export default function CountryFlag({
   country,
   emoji,
-  className = 'w-6 h-6 rounded object-cover',
+  className,
+  imgClassName = 'w-6 h-6 rounded object-cover',
   fallback,
 }: CountryFlagProps) {
   const info = useCountryFlag(country);
@@ -36,7 +38,7 @@ export default function CountryFlag({
 
   if (src) {
     return (
-      <img src={src} alt={country} className={className} loading="lazy" />
+      <img src={src} alt={country} className={imgClassName} loading="lazy" />
     );
   }
 

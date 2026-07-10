@@ -133,10 +133,16 @@ function candidateToOffer(c: Candidate, usedIds: Set<string>): ClubOffer | null 
   };
 }
 
-// New-career start: 3 offers from the lowest-rated clubs across ALL leagues.
-export function getStartingOffers(count = 3): ClubOffer[] {
-  const candidates = buildCandidates().sort((a, b) => a.reputation - b.reputation);
-  // Take from the bottom pool (lowest 40%) and randomize for variety.
+// New-career start: 3 offers from the lowest-rated clubs of the SELECTED league
+// (falls back to all leagues if the league can't be resolved).
+export function getStartingOffers(count = 3, leagueName?: string): ClubOffer[] {
+  let candidates = buildCandidates();
+  if (leagueName) {
+    const inLeague = candidates.filter((c) => c.leagueName === leagueName);
+    if (inLeague.length >= count) candidates = inLeague;
+  }
+  candidates.sort((a, b) => a.reputation - b.reputation);
+  // Take from the bottom pool (lowest-rated) and randomize for variety.
   const pool = candidates.slice(0, Math.max(count * 3, 12));
   const chosen = pickRandom(pool, count);
   const used = new Set<string>();

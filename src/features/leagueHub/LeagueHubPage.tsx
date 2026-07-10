@@ -18,7 +18,6 @@ import {
 } from '../../simulation/worldSimulator';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
-import CountryFlag from '../../components/ui/CountryFlag';
 import PageTransition from '../../components/layout/PageTransition';
 import type { LeagueTableEntry } from '../../types';
 
@@ -125,11 +124,7 @@ export default function LeagueHubPage() {
             <div>
               <h1 className="text-2xl font-bold text-white">{leagueName}</h1>
               <div className="flex items-center gap-2 text-sm text-gray-400">
-                <CountryFlag
-                  country={country}
-                  fallback={<HiFlag className="w-4 h-4" />}
-                  className="w-4 h-4 rounded-sm object-cover"
-                />
+                <HiFlag className="w-4 h-4" />
                 <span>{country}</span>
                 <span className="text-gray-600">&middot;</span>
                 <span>Season {currentSeason}</span>

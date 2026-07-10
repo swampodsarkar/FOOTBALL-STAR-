@@ -5,7 +5,6 @@ import { useGameStore } from '../../stores/gameStore';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Button from '../../components/ui/Button';
 import { SUPPORTED_LEAGUES, buildRealLeague, getLeagueLogos } from '../../services/footballData';
-import CountryFlag from '../../components/ui/CountryFlag';
 import type { LeagueName } from '../../types';
 
 const container = {
@@ -112,10 +111,7 @@ export default function SelectLeaguePage() {
                   )}
                   <div>
                     <h3 className="font-bold text-white text-lg leading-tight">{league.name}</h3>
-                    <p className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <CountryFlag country={league.country} emoji={league.flag} className="w-4 h-4 rounded-sm object-cover" />
-                      {league.country}
-                    </p>
+                    <p className="text-xs text-gray-500">{league.country}</p>
                   </div>
                 </div>
 

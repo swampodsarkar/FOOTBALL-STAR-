@@ -23,6 +23,7 @@ function ReputationStars({ rep }: { rep: number }) {
 export default function StartOffersPage() {
   const { goTo } = usePhaseNavigation();
   const player = useGameStore((s) => s.player);
+  const currentLeague = useGameStore((s) => s.currentLeague);
   const startNewCareer = useGameStore((s) => s.startNewCareer);
 
   const [offers, setOffers] = useState<ClubOffer[]>([]);
@@ -30,8 +31,8 @@ export default function StartOffersPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setOffers(getStartingOffers(3));
-  }, []);
+    setOffers(getStartingOffers(3, currentLeague?.name));
+  }, [currentLeague?.name]);
 
   const handleConfirm = async () => {
     if (!selected || !player || loading) return;
@@ -59,7 +60,7 @@ export default function StartOffersPage() {
             <h1 className="text-2xl font-bold text-white">Contract Offers</h1>
             <p className="text-sm text-gray-500 flex items-center gap-1">
               <HiSparkles className="w-4 h-4 text-indigo-400" />
-              {player?.name}, these lower-league clubs want to sign you
+               {player?.name}, these lower-ranked {currentLeague?.name ?? ''} clubs want to sign you
             </p>
           </div>
         </motion.div>
