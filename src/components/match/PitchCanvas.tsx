@@ -98,10 +98,8 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
       mode.current = side === 'home' ? 'goalHome' : 'goalAway';
       modeTimer.current = 0;
       flash.current = 1;
-      ball.current.x = side === 'home' ? 0.93 : 0.07;
-      ball.current.y = 0.5;
-      ball.current.tx = ball.current.x;
-      ball.current.ty = ball.current.y;
+      ball.current.tx = side === 'home' ? 0.985 : 0.015;
+      ball.current.ty = 0.5;
     },
     setPossession: (home) => {
       possessionHome.current = home;
@@ -284,6 +282,20 @@ function drawPitch(
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.fillRect(m - 4, m + (ph - gH) / 2, 4, gH);
   ctx.fillRect(m + pw, m + (ph - gH) / 2, 4, gH);
+
+  // nets
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  const netDepth = Math.max(3, pw * 0.012);
+  for (let i = 1; i <= 4; i++) {
+    const off = (gH / 5) * i;
+    ctx.beginPath();
+    ctx.moveTo(m - 4, m + (ph - gH) / 2 + off);
+    ctx.lineTo(m - 4 - netDepth, m + (ph - gH) / 2 + off);
+    ctx.moveTo(m + pw + 4, m + (ph - gH) / 2 + off);
+    ctx.lineTo(m + pw + 4 + netDepth, m + (ph - gH) / 2 + off);
+    ctx.stroke();
+  }
 }
 
 function drawArrow(

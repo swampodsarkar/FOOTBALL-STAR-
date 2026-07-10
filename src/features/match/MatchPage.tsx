@@ -825,15 +825,15 @@ export default function MatchPage() {
                 </div>
               </motion.div>
 
-              <div className={`rounded-2xl overflow-hidden ${shake ? 'pitch-shake' : ''}`}>
-                  <PitchCanvas
-                    ref={pitchRef}
-                    homeColor={homeColor}
-                    awayColor={awayColor}
-                    homeFormation={'4-3-3'}
-                    awayFormation={'4-3-3'}
-                    playerIsHome={isHome}
-                  />
+              <div className={`rounded-2xl overflow-hidden max-w-4xl mx-auto ${shake ? 'pitch-shake' : ''}`}>
+                <PitchCanvas
+                  ref={pitchRef}
+                  homeColor={homeColor}
+                  awayColor={awayColor}
+                  homeFormation={'4-3-3'}
+                  awayFormation={'4-3-3'}
+                  playerIsHome={isHome}
+                />
               </div>
 
               <motion.div
