@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter } from 'react-router-dom';
 import { onAuthChange, ensureAnon } from './services/firebase';
 import { useCloudStore } from './stores/cloudStore';
+import BackgroundMusic from './components/ui/BackgroundMusic';
 import AppRouter from './pages/Router';
 
 const queryClient = new QueryClient({
@@ -50,6 +51,7 @@ export default function App() {
       <HashRouter>
         <div className="min-h-screen bg-gray-950 text-white">
           <AppRouter />
+          <BackgroundMusic />
         </div>
       </HashRouter>
     </QueryClientProvider>
