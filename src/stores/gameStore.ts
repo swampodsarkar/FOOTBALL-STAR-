@@ -16,6 +16,17 @@ import { saveCloud, loadCloud } from '../services/firebase';
 import { calculateMarketValue } from '../services/marketValue';
 import { useSimulationStore } from './simulationStore';
 import { isFIFAWindow, calculateSelectionScore, getCallUpStatus, resolveNationality, NATIONAL_TEAMS } from '../services/nationalTeamService';
+import { getQualification, getZoneAtPosition } from '../services/qualificationRules';
+
+function getOrdinal(n: number): string {
+  if (n >= 11 && n <= 13) return 'th';
+  switch (n % 10) {
+    case 1: return 'st';
+    case 2: return 'nd';
+    case 3: return 'rd';
+    default: return 'th';
+  }
+}
 
 type GamePhase =
   | 'splash'
@@ -158,13 +169,14 @@ export const useGameStore = create<GameState & GameActions>()(
       },
 
       advanceWeek: () => {
-        const { currentWeek, seasonWeek, currentSeason, player } = get();
+        const { currentWeek, seasonWeek, currentSeason, player, currentLeague } = get();
         const newWeek = currentWeek + 1;
         const newSeasonWeek = seasonWeek + 1;
+        const isSeasonEnd = newWeek > 52;
         let newSeason = currentSeason;
         let transferWindow: TransferWindowType = 'None';
 
-        if (newWeek > 52) {
+        if (isSeasonEnd) {
           newSeason = currentSeason + 1;
           transferWindow = 'Summer';
         } else if (newSeasonWeek === 1) {
@@ -173,8 +185,69 @@ export const useGameStore = create<GameState & GameActions>()(
           transferWindow = 'Winter';
         }
 
-        // FIFA Window detection
-        const window = isFIFAWindow(newSeasonWeek);
+        // --- Season-end: calculate qualification ---
+        if (isSeasonEnd && currentLeague) {
+          const sim = useSimulationStore.getState();
+          const table = sim.leagueTables[currentLeague.name];
+          if (table && table.length > 0) {
+            const rules = getQualification(currentLeague.name);
+            if (rules) {
+              const qualifiers: Record<string, string[]> = {};
+              const relegated: string[] = [];
+
+              table.forEach((entry, idx) => {
+                const pos = idx + 1;
+                const zone = getZoneAtPosition(currentLeague.name, pos);
+                if (!qualifiers[zone]) qualifiers[zone] = [];
+                qualifiers[zone].push(entry.clubName);
+                if (zone === 'Relegation') relegated.push(entry.clubName);
+                if (zone === 'Relegation Playoff') relegated.push(`${entry.clubName} (playoff)`);
+              });
+
+              const champion = table[0]?.clubName ?? 'Unknown';
+              get().addInboxItem({
+                id: `season-end-champ-${Date.now()}`,
+                week: seasonWeek, season: currentSeason,
+                type: 'Season End',
+                headline: `${champion} wins the ${currentLeague.name}!`,
+                body: `${champion} are champions of the ${currentSeason}${getOrdinal(currentSeason)} season!`,
+                importance: 10,
+                date: new Date().toISOString(),
+              });
+
+              for (const [zone, clubs] of Object.entries(qualifiers)) {
+                if (zone === 'Midtable' || zone === 'Relegation' || zone === 'Relegation Playoff') continue;
+                get().addInboxItem({
+                  id: `season-end-qual-${zone}-${Date.now()}`,
+                  week: seasonWeek, season: currentSeason,
+                  type: 'Qualification',
+                  headline: `${zone}: ${clubs.join(', ')}`,
+                  body: `These clubs have qualified for the ${zone} from the ${currentLeague.name}.`,
+                  importance: 7,
+                  date: new Date().toISOString(),
+                });
+              }
+
+              if (relegated.length > 0) {
+                get().addInboxItem({
+                  id: `season-end-rel-${Date.now()}`,
+                  week: seasonWeek, season: currentSeason,
+                  type: 'Relegation',
+                  headline: `Relegated: ${relegated.join(', ')}`,
+                  body: `These clubs have been relegated from the ${currentLeague.name}.`,
+                  importance: 8,
+                  date: new Date().toISOString(),
+                });
+              }
+            }
+          }
+          // Reset simulation cache for new season
+          useSimulationStore.getState().resetCacheForNewSeason?.(currentLeague.name);
+        }
+
+        // --- FIFA Window detection ---
+        const refWeek = isSeasonEnd ? 1 : newSeasonWeek;
+        const window = isFIFAWindow(refWeek);
         let natStatus = 'Not Called' as 'Called Up' | 'On Standby' | 'Not Called';
         let natCountry = '';
         let selScore = 0;
@@ -190,13 +263,11 @@ export const useGameStore = create<GameState & GameActions>()(
             natCountry = canonNat;
 
             if (status === 'Called Up') {
-              // Add news about call-up
               const existing = get().inbox;
               if (!existing.some((n) => n.type === 'National Team Call-Up')) {
                 get().addInboxItem({
                   id: `nt-callup-${Date.now()}`,
-                  week: newSeasonWeek,
-                  season: newSeason,
+                  week: refWeek, season: newSeason,
                   type: 'National Team Call-Up',
                   headline: `Called up to ${canonNat} national team!`,
                   body: `You have been selected for the ${canonNat} squad during the ${window.name} FIFA window. Your selection score: ${selScore}/100.`,
@@ -207,8 +278,7 @@ export const useGameStore = create<GameState & GameActions>()(
             } else if (status === 'On Standby') {
               get().addInboxItem({
                 id: `nt-standby-${Date.now()}`,
-                week: newSeasonWeek,
-                season: newSeason,
+                week: refWeek, season: newSeason,
                 type: 'National Team Standby',
                 headline: `On standby for ${canonNat} national team`,
                 body: `You are on standby for the ${canonNat} squad. Keep performing well to secure a spot.`,
@@ -218,7 +288,6 @@ export const useGameStore = create<GameState & GameActions>()(
             }
           }
         } else {
-          // Clear national team status when not in FIFA window
           natStatus = 'Not Called';
           natCountry = '';
           selScore = 0;
@@ -226,9 +295,9 @@ export const useGameStore = create<GameState & GameActions>()(
         }
 
         set({
-          currentWeek: newWeek > 52 ? 1 : newWeek,
+          currentWeek: isSeasonEnd ? 1 : newWeek,
           currentSeason: newSeason,
-          seasonWeek: newWeek > 52 ? 1 : newSeasonWeek,
+          seasonWeek: isSeasonEnd ? 1 : newSeasonWeek,
           transferWindow,
           isFIFAWindow: !!window,
           nationalTeamStatus: natStatus,
@@ -237,16 +306,13 @@ export const useGameStore = create<GameState & GameActions>()(
           fifaWindowName: fifaName,
         });
 
-        // Recalculate market value weekly
         if (player) {
           const newMV = calculateMarketValue(player);
           get().updatePlayer({ marketValue: newMV });
         }
 
         const lg = get().currentLeague;
-        useSimulationStore
-          .getState()
-          .simulateWorldWeek(newSeasonWeek, lg?.name ?? '');
+        useSimulationStore.getState().simulateWorldWeek(refWeek, lg?.name ?? '');
       },
 
       setWeeklyActivities: (activities) => set({ weeklyActivities: activities }),

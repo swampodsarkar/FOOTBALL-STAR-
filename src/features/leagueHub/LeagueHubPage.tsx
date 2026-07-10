@@ -16,6 +16,11 @@ import {
   getLeagueTopRatings,
   getLeagueTopCleanSheets,
 } from '../../simulation/worldSimulator';
+import {
+  getZoneAtPosition,
+  getZoneBorderClass,
+  getZonesUsed,
+} from '../../services/qualificationRules';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import PageTransition from '../../components/layout/PageTransition';
@@ -24,20 +29,6 @@ import type { LeagueTableEntry } from '../../types';
 type Tab = 'Table' | 'Fixtures' | 'Results' | 'Stats';
 
 const tabs: Tab[] = ['Table', 'Fixtures', 'Results', 'Stats'];
-
-const zoneColors: Record<string, string> = {
-  champions: 'border-l-4 border-l-sky-500',
-  europa: 'border-l-4 border-l-emerald-500',
-  relegation: 'border-l-4 border-l-rose-500',
-  midtable: 'border-l-4 border-l-transparent',
-};
-
-function getZoneClass(index: number, total: number): string {
-  if (index < 4) return zoneColors.champions;
-  if (index < 6) return zoneColors.europa;
-  if (index >= total - 3) return zoneColors.relegation;
-  return zoneColors.midtable;
-}
 
 function FormDot({ result }: { result: string }) {
   const color =
@@ -202,7 +193,7 @@ export default function LeagueHubPage() {
                               isPlayerClub
                                 ? 'bg-indigo-600/10 border-indigo-500/30'
                                 : 'hover:bg-white/5'
-                            } ${getZoneClass(index, table.length)}`}
+                            } ${getZoneBorderClass(getZoneAtPosition(leagueName, index + 1))}`}
                           >
                             <td className="px-3 py-3 font-bold text-white">
                               {index + 1}
@@ -274,18 +265,12 @@ export default function LeagueHubPage() {
                   </table>
                 </div>
                 <div className="px-5 py-3 border-t border-gray-800 flex flex-wrap gap-4 text-xs text-gray-500">
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-sky-500" />
-                    <span>Champions League</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-emerald-500" />
-                    <span>Europa League</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-rose-500" />
-                    <span>Relegation</span>
-                  </div>
+                  {getZonesUsed(leagueName).map((z) => (
+                    <div key={z.zone} className="flex items-center gap-1">
+                      <span className={`w-3 h-1 rounded ${z.bgClass}`} />
+                      <span>{z.label}</span>
+                    </div>
+                  ))}
                 </div>
               </Card>
             </motion.div>

@@ -56,6 +56,7 @@ interface SimulationStoreActions {
   getPlayerTransfers: (playerId: string) => TransferOffer[];
   acceptTransfer: (offerId: string) => void;
   rejectTransfer: (offerId: string) => void;
+  resetCacheForNewSeason: (leagueName: string) => void;
 }
 
 export const useSimulationStore = create<
@@ -203,6 +204,14 @@ export const useSimulationStore = create<
         t.id === offerId ? { ...t, status: 'Rejected' as const } : t
       ),
     })),
+  resetCacheForNewSeason: (leagueName) => {
+    resetWorldCache();
+    set((state) => ({
+      worldWeek: 0,
+      leagueTables: { ...state.leagueTables, [leagueName]: [] },
+      leagueMatchResults: { ...state.leagueMatchResults, [leagueName]: [] },
+    }));
+  },
 }));
 
 function buildSeasonData(league: League, season: number): SeasonData {

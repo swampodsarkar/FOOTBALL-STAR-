@@ -137,6 +137,9 @@ export interface SeasonData {
   topScorer: { name: string; goals: number; club: string };
   playerOfSeason?: string;
   leagueTable: LeagueTableEntry[];
+  qualifiers?: { zone: string; clubs: string[] }[];
+  relegations?: string[];
+  promoted?: string[];
 }
 
 export interface LeagueTableEntry {
