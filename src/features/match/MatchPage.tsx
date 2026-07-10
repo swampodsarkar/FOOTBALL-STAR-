@@ -833,6 +833,7 @@ export default function MatchPage() {
                   homeFormation={'4-3-3'}
                   awayFormation={'4-3-3'}
                   playerIsHome={isHome}
+                  playerPosition={player?.position}
                 />
               </div>
 

@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useEffect, useRef } from 'react';
+import type { Position } from '../../types';
 import {
   type FormationName,
   getFormationPositions,
@@ -28,11 +29,17 @@ interface PitchProps {
   homeFormation: FormationName;
   awayFormation: FormationName;
   playerIsHome: boolean;
+  playerPosition?: Position;
 }
 
 type Mode = 'idle' | 'attackHome' | 'attackAway' | 'goalHome' | 'goalAway';
 
 const ASPECT = 105 / 68;
+
+const POS_INDEX: Record<string, number> = {
+  GK: 0, LB: 1, CB: 2, RB: 4, CDM: 5, CM: 6, CAM: 7,
+  LM: 8, RM: 10, LW: 8, RW: 10, ST: 9, CF: 9,
+};
 
 function buildSquad(points: PitchPoint[], pushForward: boolean): Player[] {
   return points.map((p, i) => ({
@@ -43,8 +50,53 @@ function buildSquad(points: PitchPoint[], pushForward: boolean): Player[] {
   }));
 }
 
+function genCrowd(W: number, H: number, pad: number): { x: number; y: number; r: number; c: string }[] {
+  const arr: { x: number; y: number; r: number; c: string }[] = [];
+  const cols = ['#cbd5e1', '#94a3b8', '#e2e8f0', '#f8fafc', '#64748b', '#a3b1c6'];
+  const step = Math.max(3, pad * 0.34);
+  for (let x = 4; x < W - 4; x += step) {
+    for (let y = 3; y < pad - 2; y += step) {
+      arr.push({
+        x: x + (Math.random() - 0.5) * step * 0.5,
+        y: y + (Math.random() - 0.5) * step * 0.5,
+        r: Math.max(0.6, step * 0.13),
+        c: cols[(Math.random() * cols.length) | 0],
+      });
+    }
+  }
+  for (let y = pad + 8; y < H - pad - 8; y += step) {
+    for (const x of [3, W - pad + 3]) {
+      arr.push({
+        x: x + (Math.random() - 0.5) * step * 0.5,
+        y: y + (Math.random() - 0.5) * step * 0.5,
+        r: Math.max(0.6, step * 0.13),
+        c: cols[(Math.random() * cols.length) | 0],
+      });
+    }
+  }
+  return arr;
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const ang = (Math.PI / 5) * i - Math.PI / 2;
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const px = x + Math.cos(ang) * rad;
+    const py = y + Math.sin(ang) * rad;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+}
+
 const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
-  { homeColor, awayColor, homeFormation, awayFormation, playerIsHome },
+  { homeColor, awayColor, homeFormation, awayFormation, playerIsHome, playerPosition },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -61,6 +113,9 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
   const momentum = useRef(50);
   const colors = useRef({ home: homeColor, away: awayColor, playerIsHome });
   const formations = useRef({ home: homeFormation, away: awayFormation });
+  const crowdRef = useRef<{ x: number; y: number; r: number; c: string }[]>([]);
+  const crowdSize = useRef({ w: 0, h: 0, pad: 0 });
+  const playerIndex = POS_INDEX[playerPosition ?? 'ST'] ?? 9;
 
   colors.current = { home: homeColor, away: awayColor, playerIsHome };
   formations.current = { home: homeFormation, away: awayFormation };
@@ -135,56 +190,82 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
-      const m = 10;
+      const pad = Math.max(16, Math.min(30, W * 0.05));
+      const m = pad + 6;
       const pw = W - m * 2;
       const ph = H - m * 2;
       const px = (x: number) => m + x * pw;
       const py = (y: number) => m + y * ph;
 
-      modeTimer.current += 1;
+      // (re)generate crowd when size changes
+      if (
+        crowdRef.current.length === 0 ||
+        crowdSize.current.w !== W ||
+        crowdSize.current.h !== H ||
+        crowdSize.current.pad !== pad
+      ) {
+        crowdRef.current = genCrowd(W, H, pad);
+        crowdSize.current = { w: W, h: H, pad };
+      }
+      drawStadium(ctx, W, H, pad, crowdRef.current, homeColor, awayColor);
 
+      modeTimer.current += 1;
       drawPitch(ctx, m, pw, ph);
 
       const t = performance.now() / 1000;
 
-      // ease ball
       ball.current.x += (ball.current.tx - ball.current.x) * 0.05;
       ball.current.y += (ball.current.ty - ball.current.y) * 0.05 + Math.sin(t * 3) * ball.current.curve * 0.01;
 
-      // attacking side drives unit forward
       const attackHome = mode.current === 'attackHome' || mode.current === 'goalHome';
       const attackAway = mode.current === 'attackAway' || mode.current === 'goalAway';
 
-      const drawTeam = (players: Player[], color: string, isAttacking: boolean) => {
-        for (const p of players) {
+      const drawTeam = (players: Player[], color: string, isAttacking: boolean, highlight: number) => {
+        for (let i = 0; i < players.length; i++) {
+          const p = players[i];
           let bx = p.base.x;
           let by = p.base.y;
-          const jitterX = Math.sin(t * 1.1 + p.phase) * p.amp;
-          const jitterY = Math.cos(t * 0.9 + p.phase) * p.amp;
-          bx += jitterX;
-          by += jitterY;
+          bx += Math.sin(t * 1.1 + p.phase) * p.amp;
+          by += Math.cos(t * 0.9 + p.phase) * p.amp;
           if (isAttacking && p.pushing) {
             bx += (mode.current === 'attackHome' || mode.current === 'attackAway' ? 0.06 : 0.03);
           }
+          const cx = px(bx);
+          const cy = py(by);
+          const isPlayer = i === highlight;
+          const radius = isPlayer ? Math.max(6, W * 0.018) : Math.max(4, W * 0.011);
+
+          if (isPlayer) {
+            const pulse = 1 + 0.18 * Math.sin(t * 5);
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(250,204,21,0.9)';
+            ctx.lineWidth = 2;
+            ctx.arc(cx, cy, radius * 1.7 * pulse, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
           ctx.beginPath();
           ctx.fillStyle = color;
-          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-          ctx.lineWidth = 1.5;
-          ctx.arc(px(bx), py(by), Math.max(4, W * 0.011), 0, Math.PI * 2);
+          ctx.strokeStyle = isPlayer ? '#facc15' : 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = isPlayer ? 2 : 1.5;
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
+
+          if (isPlayer) {
+            drawStar(ctx, cx, cy - radius - Math.max(4, W * 0.014), Math.max(3, W * 0.01), '#facc15');
+          }
         }
       };
 
-      // possession drift for idle
       if (mode.current === 'idle') {
         const drift = (possessionHome.current - 50) / 50;
         ball.current.tx = 0.5 + drift * 0.18;
         ball.current.ty = 0.5;
       }
 
-      drawTeam(home.current, homeColor, attackHome);
-      drawTeam(away.current, awayColor, attackAway);
+      drawTeam(home.current, homeColor, attackHome, playerIsHome ? playerIndex : -1);
+      drawTeam(away.current, awayColor, attackAway, playerIsHome ? -1 : playerIndex);
 
       // ball
       ctx.beginPath();
@@ -195,14 +276,19 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
       ctx.fill();
       ctx.stroke();
 
-      // attack arrow
       if (mode.current === 'attackHome' || mode.current === 'attackAway') {
         const from = { x: ball.current.x, y: ball.current.y };
         const to = mode.current === 'attackHome' ? { x: 0.95, y: 0.5 } : { x: 0.05, y: 0.5 };
-        drawArrow(ctx, px(from.x), py(from.y), px(to.x), py(to.y), colors.current.playerIsHome ? (mode.current === 'attackHome' ? homeColor : awayColor) : '#fbbf24');
+        drawArrow(
+          ctx,
+          px(from.x),
+          py(from.y),
+          px(to.x),
+          py(to.y),
+          colors.current.playerIsHome ? (mode.current === 'attackHome' ? homeColor : awayColor) : '#fbbf24',
+        );
       }
 
-      // goal flash
       if (flash.current > 0) {
         flash.current = Math.max(0, flash.current - 0.012);
         const goalColor = mode.current === 'goalHome' ? homeColor : awayColor;
@@ -226,7 +312,7 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeColor, awayColor, playerIsHome]);
+  }, [homeColor, awayColor, playerIsHome, playerPosition]);
 
   return (
     <div ref={wrapRef} className="w-full rounded-xl overflow-hidden border border-gray-800 bg-emerald-950/40 relative">
@@ -234,6 +320,37 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
     </div>
   );
 });
+
+function drawStadium(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  pad: number,
+  crowd: { x: number; y: number; r: number; c: string }[],
+  homeColor: string,
+  awayColor: string,
+) {
+  ctx.fillStyle = '#0b1220';
+  ctx.fillRect(0, 0, W, pad);
+  ctx.fillRect(0, 0, pad, H);
+  ctx.fillRect(W - pad, 0, pad, H);
+
+  for (const d of crowd) {
+    ctx.beginPath();
+    ctx.fillStyle = d.c;
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ad boards (banners) along inner edges
+  ctx.fillStyle = homeColor;
+  ctx.fillRect(0, pad - 3, W / 2, 3);
+  ctx.fillStyle = awayColor;
+  ctx.fillRect(W / 2, pad - 3, W / 2, 3);
+  ctx.fillStyle = 'rgba(148,163,184,0.35)';
+  ctx.fillRect(pad - 3, pad, 3, H - pad * 2);
+  ctx.fillRect(W - pad, pad, 3, H - pad * 2);
+}
 
 function drawPitch(
   ctx: CanvasRenderingContext2D,
@@ -251,13 +368,11 @@ function drawPitch(
   ctx.lineWidth = 2;
   ctx.strokeRect(m, m, pw, ph);
 
-  // halfway line
   ctx.beginPath();
   ctx.moveTo(m + pw / 2, m);
   ctx.lineTo(m + pw / 2, m + ph);
   ctx.stroke();
 
-  // center circle
   ctx.beginPath();
   ctx.arc(m + pw / 2, m + ph / 2, ph * 0.13, 0, Math.PI * 2);
   ctx.stroke();
@@ -266,24 +381,20 @@ function drawPitch(
   ctx.fillStyle = 'rgba(255,255,255,0.65)';
   ctx.fill();
 
-  // penalty boxes
   const boxW = pw * 0.12;
   const boxH = ph * 0.5;
   ctx.strokeRect(m, m + (ph - boxH) / 2, boxW, boxH);
   ctx.strokeRect(m + pw - boxW, m + (ph - boxH) / 2, boxW, boxH);
 
-  // goal boxes
   const gW = pw * 0.045;
   const gH = ph * 0.22;
   ctx.strokeRect(m, m + (ph - gH) / 2, gW, gH);
   ctx.strokeRect(m + pw - gW, m + (ph - gH) / 2, gW, gH);
 
-  // goals
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.fillRect(m - 4, m + (ph - gH) / 2, 4, gH);
   ctx.fillRect(m + pw, m + (ph - gH) / 2, 4, gH);
 
-  // nets
   ctx.strokeStyle = 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
   const netDepth = Math.max(3, pw * 0.012);
