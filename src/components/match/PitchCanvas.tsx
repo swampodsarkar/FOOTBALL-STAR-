@@ -23,6 +23,14 @@ interface Player {
   pushing: boolean;
 }
 
+interface ScoreboardData {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  minute: number;
+}
+
 interface PitchProps {
   homeColor: string;
   awayColor: string;
@@ -30,6 +38,11 @@ interface PitchProps {
   awayFormation: FormationName;
   playerIsHome: boolean;
   playerPosition?: Position;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  matchTime: number;
 }
 
 type Mode = 'idle' | 'attackHome' | 'attackAway' | 'goalHome' | 'goalAway';
@@ -96,7 +109,7 @@ function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number
 }
 
 const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
-  { homeColor, awayColor, homeFormation, awayFormation, playerIsHome, playerPosition },
+  { homeColor, awayColor, homeFormation, awayFormation, playerIsHome, playerPosition, homeTeam, awayTeam, homeScore, awayScore, matchTime },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -115,10 +128,12 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
   const formations = useRef({ home: homeFormation, away: awayFormation });
   const crowdRef = useRef<{ x: number; y: number; r: number; c: string }[]>([]);
   const crowdSize = useRef({ w: 0, h: 0, pad: 0 });
+  const scoreboardRef = useRef<ScoreboardData>({ homeTeam: '', awayTeam: '', homeScore: 0, awayScore: 0, minute: 0 });
   const playerIndex = POS_INDEX[playerPosition ?? 'ST'] ?? 9;
 
   colors.current = { home: homeColor, away: awayColor, playerIsHome };
   formations.current = { home: homeFormation, away: awayFormation };
+  scoreboardRef.current = { homeTeam, awayTeam, homeScore, awayScore, minute: matchTime };
 
   const rebuild = () => {
     home.current = buildSquad(getFormationPositions(formations.current.home), true);
@@ -207,7 +222,7 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
         crowdRef.current = genCrowd(W, H, pad);
         crowdSize.current = { w: W, h: H, pad };
       }
-      drawStadium(ctx, W, H, pad, crowdRef.current, homeColor, awayColor);
+      drawStadium(ctx, W, H, pad, crowdRef.current, homeColor, awayColor, scoreboardRef.current);
 
       modeTimer.current += 1;
       drawPitch(ctx, m, pw, ph);
@@ -321,6 +336,8 @@ const PitchCanvas = forwardRef<PitchHandle, PitchProps>(function PitchCanvas(
   );
 });
 
+const AD_BRANDS = ['VISA', 'Emirates', 'Nike', 'Qatar Airways', 'Coca-Cola', 'Adidas', 'Hyundai', 'Sony', 'Pepsi', 'Fly Emirates'];
+
 function drawStadium(
   ctx: CanvasRenderingContext2D,
   W: number,
@@ -329,11 +346,13 @@ function drawStadium(
   crowd: { x: number; y: number; r: number; c: string }[],
   homeColor: string,
   awayColor: string,
+  scoreboard?: ScoreboardData,
 ) {
   ctx.fillStyle = '#0b1220';
   ctx.fillRect(0, 0, W, pad);
   ctx.fillRect(0, 0, pad, H);
   ctx.fillRect(W - pad, 0, pad, H);
+  ctx.fillRect(0, H - pad, W, pad);
 
   for (const d of crowd) {
     ctx.beginPath();
@@ -342,14 +361,112 @@ function drawStadium(
     ctx.fill();
   }
 
-  // ad boards (banners) along inner edges
-  ctx.fillStyle = homeColor;
-  ctx.fillRect(0, pad - 3, W / 2, 3);
-  ctx.fillStyle = awayColor;
-  ctx.fillRect(W / 2, pad - 3, W / 2, 3);
-  ctx.fillStyle = 'rgba(148,163,184,0.35)';
-  ctx.fillRect(pad - 3, pad, 3, H - pad * 2);
-  ctx.fillRect(W - pad, pad, 3, H - pad * 2);
+  // digital scoreboard display (top center)
+  if (scoreboard) {
+    const sbW = Math.min(W * 0.48, 280);
+    const sbH = 26;
+    const sbX = (W - sbW) / 2;
+    const sbY = 3;
+
+    ctx.beginPath();
+    const r = 4;
+    ctx.moveTo(sbX + r, sbY);
+    ctx.lineTo(sbX + sbW - r, sbY);
+    ctx.quadraticCurveTo(sbX + sbW, sbY, sbX + sbW, sbY + r);
+    ctx.lineTo(sbX + sbW, sbY + sbH - r);
+    ctx.quadraticCurveTo(sbX + sbW, sbY + sbH, sbX + sbW - r, sbY + sbH);
+    ctx.lineTo(sbX + r, sbY + sbH);
+    ctx.quadraticCurveTo(sbX, sbY + sbH, sbX, sbY + sbH - r);
+    ctx.lineTo(sbX, sbY + r);
+    ctx.quadraticCurveTo(sbX, sbY, sbX + r, sbY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const fs = sbH * 0.42;
+    ctx.textBaseline = 'middle';
+
+    const homeShort = scoreboard.homeTeam.length > 12 ? scoreboard.homeTeam.slice(0, 10) + '' : scoreboard.homeTeam;
+    const awayShort = scoreboard.awayTeam.length > 12 ? scoreboard.awayTeam.slice(0, 10) + '' : scoreboard.awayTeam;
+
+    ctx.font = `900 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = homeColor;
+    ctx.fillText(homeShort.toUpperCase(), sbX + sbW * 0.37, sbY + sbH * 0.46);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = awayColor;
+    ctx.fillText(awayShort.toUpperCase(), sbX + sbW * 0.63, sbY + sbH * 0.46);
+
+    ctx.font = `900 ${sbH * 0.52}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`${scoreboard.homeScore}-${scoreboard.awayScore}`, sbX + sbW / 2, sbY + sbH * 0.42);
+
+    ctx.font = `700 ${sbH * 0.3}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.fillStyle = '#fbbf24';
+    const m = Math.floor(scoreboard.minute);
+    const minStr = m > 90 ? `${m}+` : `${m}'`;
+    ctx.fillText(minStr, sbX + sbW / 2, sbY + sbH * 0.88);
+  }
+
+  // LED ad boards along the bottom
+  const boardH = Math.max(8, pad * 0.38);
+  const segments = 5;
+  const segW = W / segments;
+  for (let i = 0; i < segments; i++) {
+    const ax = i * segW;
+    const ay = H - boardH;
+    ctx.fillStyle = i % 2 === 0 ? '#1a1a2e' : '#0f1a2e';
+    ctx.fillRect(ax, ay, segW - 0.5, boardH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(ax, ay, segW, boardH);
+
+    ctx.font = `900 ${boardH * 0.55}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = i % 2 === 0 ? '#fbbf24' : '#60a5fa';
+    ctx.fillText(AD_BRANDS[i % AD_BRANDS.length], ax + segW / 2, ay + boardH / 2);
+  }
+
+  // LED ad boards on left and right edges
+  const sideW = Math.max(3, pad * 0.12);
+  const sideH = H - pad * 2 - boardH;
+  const sideY = pad + 6;
+
+  const leftX = pad - sideW;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(leftX, sideY, sideW, sideH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(leftX, sideY, sideW, sideH);
+
+  for (let i = 0; i < 4; i++) {
+    ctx.font = `700 ${sideW * 0.65}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(251,191,36,0.6)' : 'rgba(96,165,250,0.6)';
+    ctx.fillText(AD_BRANDS[i % AD_BRANDS.length].slice(0, 4), leftX + sideW / 2, sideY + (sideH / 8) * (i * 2 + 1));
+  }
+
+  const rightX = W - pad;
+  ctx.fillStyle = '#0f1a2e';
+  ctx.fillRect(rightX, sideY, sideW, sideH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(rightX, sideY, sideW, sideH);
+
+  for (let i = 0; i < 4; i++) {
+    ctx.font = `700 ${sideW * 0.65}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(251,191,36,0.6)' : 'rgba(96,165,250,0.6)';
+    ctx.fillText(AD_BRANDS[(i + 2) % AD_BRANDS.length].slice(0, 4), rightX + sideW / 2, sideY + (sideH / 8) * (i * 2 + 1));
+  }
 }
 
 function drawPitch(

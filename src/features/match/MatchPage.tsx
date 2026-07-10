@@ -836,6 +836,11 @@ export default function MatchPage() {
                       awayFormation={'4-3-3'}
                       playerIsHome={isHome}
                       playerPosition={player?.position}
+                      homeTeam={matchState.homeTeam}
+                      awayTeam={matchState.awayTeam}
+                      homeScore={score.home}
+                      awayScore={score.away}
+                      matchTime={matchTime}
                     />
                   </div>
 
