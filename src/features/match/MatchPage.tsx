@@ -825,92 +825,94 @@ export default function MatchPage() {
                 </div>
               </motion.div>
 
-              <div className={`rounded-2xl overflow-hidden max-w-4xl mx-auto ${shake ? 'pitch-shake' : ''}`}>
-                <PitchCanvas
-                  ref={pitchRef}
-                  homeColor={homeColor}
-                  awayColor={awayColor}
-                  homeFormation={'4-3-3'}
-                  awayFormation={'4-3-3'}
-                  playerIsHome={isHome}
-                  playerPosition={player?.position}
-                />
-              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div className="lg:col-span-3 space-y-4">
+                  <div className={`rounded-2xl overflow-hidden ${shake ? 'pitch-shake' : ''}`}>
+                    <PitchCanvas
+                      ref={pitchRef}
+                      homeColor={homeColor}
+                      awayColor={awayColor}
+                      homeFormation={'4-3-3'}
+                      awayFormation={'4-3-3'}
+                      playerIsHome={isHome}
+                      playerPosition={player?.position}
+                    />
+                  </div>
 
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 text-center"
-              >
-                <div className="flex items-center justify-center gap-6 mb-4">
-                  <div className="flex-1 flex items-center justify-end gap-3">
-                    <ClubCrest club={isHome ? currentClub : opponentClub} name={matchState.homeTeam} color={homeColor} size={28} />
-                    <p className="text-lg font-bold text-white">{matchState.homeTeam}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-5xl font-black text-white">{score.home}</span>
-                    <span className="text-2xl text-gray-600">-</span>
-                    <span className="text-5xl font-black text-white">{score.away}</span>
-                  </div>
-                  <div className="flex-1 flex items-center justify-start gap-3">
-                    <p className="text-lg font-bold text-white">{matchState.awayTeam}</p>
-                    <ClubCrest club={isHome ? opponentClub : currentClub} name={matchState.awayTeam} color={awayColor} size={28} />
-                  </div>
-                </div>
-                <div className="flex items-center justify-center gap-2">
-                  <HiCalendar className="w-4 h-4 text-gray-500" />
-                  <span className="text-2xl font-mono font-bold text-indigo-400">{formatMinute(matchTime)}</span>
-                </div>
-              </motion.div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { label: 'Possession', home: `${stats.possession.home}%`, away: `${stats.possession.away}%`, icon: <HiArrowTrendingUp className="w-4 h-4 text-blue-400" /> },
-                  { label: 'xG', home: stats.xG.home.toFixed(1), away: stats.xG.away.toFixed(1), icon: <HiTrophy className="w-4 h-4 text-amber-400" /> },
-                  { label: 'Shots', home: stats.shots.home, away: stats.shots.away, icon: <HiBolt className="w-4 h-4 text-rose-400" /> },
-                  { label: 'Pass Acc', home: `${stats.passAccuracy.home}%`, away: `${stats.passAccuracy.away}%`, icon: <HiAcademicCap className="w-4 h-4 text-emerald-400" /> },
-                ].map((stat) => (
-                  <Card key={stat.label}>
-                    <div className="flex items-center gap-2 mb-2">
-                      {stat.icon}
-                      <span className="text-xs text-gray-500 uppercase tracking-wider">{stat.label}</span>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 text-center"
+                  >
+                    <div className="flex items-center justify-center gap-6 mb-4">
+                      <div className="flex-1 flex items-center justify-end gap-3">
+                        <ClubCrest club={isHome ? currentClub : opponentClub} name={matchState.homeTeam} color={homeColor} size={28} />
+                        <p className="text-lg font-bold text-white">{matchState.homeTeam}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-5xl font-black text-white">{score.home}</span>
+                        <span className="text-2xl text-gray-600">-</span>
+                        <span className="text-5xl font-black text-white">{score.away}</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-start gap-3">
+                        <p className="text-lg font-bold text-white">{matchState.awayTeam}</p>
+                        <ClubCrest club={isHome ? opponentClub : currentClub} name={matchState.awayTeam} color={awayColor} size={28} />
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm font-semibold">
-                      <span className="text-white">{stat.home}</span>
-                      <span className="text-gray-600">vs</span>
-                      <span className="text-white">{stat.away}</span>
+                    <div className="flex items-center justify-center gap-2">
+                      <HiCalendar className="w-4 h-4 text-gray-500" />
+                      <span className="text-2xl font-mono font-bold text-indigo-400">{formatMinute(matchTime)}</span>
+                    </div>
+                  </motion.div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Possession', home: `${stats.possession.home}%`, away: `${stats.possession.away}%`, icon: <HiArrowTrendingUp className="w-4 h-4 text-blue-400" /> },
+                      { label: 'xG', home: stats.xG.home.toFixed(1), away: stats.xG.away.toFixed(1), icon: <HiTrophy className="w-4 h-4 text-amber-400" /> },
+                      { label: 'Shots', home: stats.shots.home, away: stats.shots.away, icon: <HiBolt className="w-4 h-4 text-rose-400" /> },
+                      { label: 'Pass Acc', home: `${stats.passAccuracy.home}%`, away: `${stats.passAccuracy.away}%`, icon: <HiAcademicCap className="w-4 h-4 text-emerald-400" /> },
+                    ].map((stat) => (
+                      <Card key={stat.label}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {stat.icon}
+                          <span className="text-xs text-gray-500 uppercase tracking-wider">{stat.label}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm font-semibold">
+                          <span className="text-white">{stat.home}</span>
+                          <span className="text-gray-600">vs</span>
+                          <span className="text-white">{stat.away}</span>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 space-y-4">
+                  <Card>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{matchState.homeTeam}</span>
+                        <span className="font-semibold text-indigo-400">MOMENTUM</span>
+                        <span>{matchState.awayTeam}</span>
+                      </div>
+                      <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
+                        <motion.div
+                          animate={{ left: `${stats.momentum}%` }}
+                          transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+                          className="absolute top-0 w-1 h-full bg-indigo-400 rounded-full"
+                          style={{ transform: 'translateX(-50%)' }}
+                        />
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${stats.momentum}%`,
+                            background: `linear-gradient(90deg, ${stats.momentum < 50 ? '#ef4444' : '#22c55e'}, ${stats.momentum < 50 ? '#f97316' : '#10b981'})`,
+                          }}
+                        />
+                      </div>
                     </div>
                   </Card>
-                ))}
-              </div>
 
-              <Card>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>{matchState.homeTeam}</span>
-                    <span className="font-semibold text-indigo-400">MOMENTUM</span>
-                    <span>{matchState.awayTeam}</span>
-                  </div>
-                  <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
-                    <motion.div
-                      animate={{ left: `${stats.momentum}%` }}
-                      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-                      className="absolute top-0 w-1 h-full bg-indigo-400 rounded-full"
-                      style={{ transform: 'translateX(-50%)' }}
-                    />
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${stats.momentum}%`,
-                        background: `linear-gradient(90deg, ${stats.momentum < 50 ? '#ef4444' : '#22c55e'}, ${stats.momentum < 50 ? '#f97316' : '#10b981'})`,
-                      }}
-                    />
-                  </div>
-                </div>
-              </Card>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2">
                   <Card header={<span className="text-sm font-bold text-white uppercase tracking-wider">Commentary</span>}>
                     <div
                       ref={commentaryRef}
@@ -929,9 +931,7 @@ export default function MatchPage() {
                       ))}
                     </div>
                   </Card>
-                </div>
 
-                <div className="space-y-4">
                   <Card header={<span className="text-sm font-bold text-white uppercase tracking-wider">Player Rating</span>}>
                     <div className="text-center">
                       <span className="text-4xl font-black bg-gradient-to-r from-sky-400 to-cyan-400 bg-clip-text text-transparent">
