@@ -22,7 +22,8 @@ type GamePhase =
   | 'news'
   | 'social'
   | 'careerTimeline'
-  | 'settings';
+  | 'settings'
+  | 'press';
 
 const phaseRoute: Record<GamePhase, string> = {
   splash: '/',
@@ -45,6 +46,7 @@ const phaseRoute: Record<GamePhase, string> = {
   social: '/career/social',
   careerTimeline: '/career/timeline',
   settings: '/career/settings',
+  press: '/career/press',
 };
 
 export function usePhaseNavigation() {

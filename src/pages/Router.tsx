@@ -25,6 +25,7 @@ const NewsPage = lazy(() => import('../features/news/NewsPage'));
 const SocialPage = lazy(() => import('../features/social/SocialPage'));
 const CareerTimelinePage = lazy(() => import('../features/careerTimeline/CareerTimelinePage'));
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
+const PressConferencePage = lazy(() => import('../features/press/PressConferencePage'));
 
 function SuspenseWrapper({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -68,6 +69,7 @@ export default function AppRouter() {
         <Route path="/career/social" element={<SuspenseWrapper><CareerLayout><SocialPage /></CareerLayout></SuspenseWrapper>} />
         <Route path="/career/timeline" element={<SuspenseWrapper><CareerLayout><CareerTimelinePage /></CareerLayout></SuspenseWrapper>} />
         <Route path="/career/settings" element={<SuspenseWrapper><CareerLayout><SettingsPage /></CareerLayout></SuspenseWrapper>} />
+        <Route path="/career/press" element={<SuspenseWrapper><CareerLayout><PressConferencePage /></CareerLayout></SuspenseWrapper>} />
       </Routes>
     </AnimatePresence>
   );

@@ -18,6 +18,8 @@ import { useSimulationStore } from './simulationStore';
 import { isFIFAWindow, calculateSelectionScore, getCallUpStatus, resolveNationality, NATIONAL_TEAMS } from '../services/nationalTeamService';
 import { getQualification, getZoneAtPosition } from '../services/qualificationRules';
 import { processWeeklySalary, calculateExpenses } from '../simulation/economySystem';
+import { isTournamentWindow, generateTournamentBracket, generateTournamentNews } from '../services/internationalTournament';
+import { calculateTeamChemistry, generateDramaEvent, applyDramaToPlayer } from '../services/chemistrySystem';
 
 function getOrdinal(n: number): string {
   if (n >= 11 && n <= 13) return 'th';
@@ -49,7 +51,8 @@ type GamePhase =
   | 'news'
   | 'social'
   | 'careerTimeline'
-  | 'settings';
+  | 'settings'
+  | 'press';
 
 type TransferWindowType = 'Summer' | 'Winter' | 'None';
 
@@ -82,6 +85,8 @@ interface GameState {
   nationalTeamCountry: string;
   selectionScore: number;
   fifaWindowName: string;
+  activeTournament: { id: string; name: string; icon: string; stage: string } | null;
+  teamChemistry: number;
 }
 
 interface GameActions {
@@ -138,6 +143,8 @@ export const useGameStore = create<GameState & GameActions>()(
       nationalTeamCountry: '',
       selectionScore: 0,
       fifaWindowName: '',
+      activeTournament: null,
+      teamChemistry: 50,
 
       setGamePhase: (phase) => set({ gamePhase: phase }),
 
@@ -295,6 +302,55 @@ export const useGameStore = create<GameState & GameActions>()(
           fifaName = '';
         }
 
+        // --- International Tournament detection ---
+        const refSeason = isSeasonEnd ? newSeason : currentSeason;
+        const activeTournament = isTournamentWindow(refSeason, refWeek);
+        let tournamentInfo = get().activeTournament;
+        if (activeTournament && !tournamentInfo) {
+          const bracket = generateTournamentBracket(refSeason, activeTournament);
+          const news = generateTournamentNews(bracket, refWeek, refSeason);
+          for (const item of news) {
+            get().addInboxItem({
+              id: `tournament-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              week: refWeek, season: refSeason,
+              type: 'International Tournament',
+              headline: item.headline,
+              body: item.body,
+              importance: 9,
+              date: new Date().toISOString(),
+            });
+          }
+          tournamentInfo = { id: activeTournament.id, name: activeTournament.name, icon: activeTournament.icon, stage: 'In Progress' };
+        } else if (!activeTournament) {
+          tournamentInfo = null;
+        }
+
+        // --- Team Chemistry ---
+        let chemistry = 50;
+        if (currentLeague) {
+          const sim = useSimulationStore.getState();
+          const table = sim.leagueTables[currentLeague.name];
+          if (table && table.length > 0) {
+            const club = currentLeague.clubs.find((c) => c.id === currentClub?.id);
+            if (club?.aiSquad) {
+              chemistry = calculateTeamChemistry(club.aiSquad);
+            }
+          }
+        }
+        const drama = player ? generateDramaEvent(chemistry, player.matchHistory.slice(-5)) : null;
+        if (drama && player) {
+          get().updatePlayer(applyDramaToPlayer(player, drama));
+          get().addInboxItem({
+            id: `drama-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            week: refWeek, season: refSeason,
+            type: 'Drama',
+            headline: drama.title,
+            body: drama.description,
+            importance: 6,
+            date: new Date().toISOString(),
+          });
+        }
+
         set({
           currentWeek: isSeasonEnd ? 1 : newWeek,
           currentSeason: newSeason,
@@ -305,6 +361,8 @@ export const useGameStore = create<GameState & GameActions>()(
           nationalTeamCountry: natCountry,
           selectionScore: selScore,
           fifaWindowName: fifaName,
+          activeTournament: tournamentInfo,
+          teamChemistry: chemistry,
         });
 
         if (player) {
