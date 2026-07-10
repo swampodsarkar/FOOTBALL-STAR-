@@ -279,6 +279,7 @@ export function getLeagueTopCleanSheets(league: League, count = 5): { name: stri
 
 export async function generateWorldNews(leagues: League[], week: number, season: number): Promise<NewsArticle[]> {
   const articles: NewsArticle[] = [];
+  const groqPromises: Promise<void>[] = [];
 
   for (const league of leagues) {
     const standings = getLeagueTable(league.name);
@@ -326,13 +327,18 @@ export async function generateWorldNews(leagues: League[], week: number, season:
         const potentialClub = pick(leagues.flatMap(l => l.clubs).filter(c => c.id !== club.id));
         if (potentialClub) {
           const fee = randInt(10, 150);
-          const groqArticle = await generateNewsArticle(`transfer rumor: ${player.name} from ${club.name} linked with ${potentialClub.name} for $${fee}M`);
-          if (groqArticle) {
-            articles.push(createArticle(week, season, 'Transfer', groqArticle.headline, 5));
-            if (groqArticle.body) articles[articles.length - 1].body = groqArticle.body;
-          } else {
-            articles.push(createArticle(week, season, 'Transfer', `${player.name} linked with ${potentialClub.name} for $${fee}M.`, 5));
-          }
+          const idx = articles.length;
+          articles.push(createArticle(week, season, 'Transfer', `${player.name} linked with ${potentialClub.name} for $${fee}M.`, 5));
+          groqPromises.push(
+            generateNewsArticle(`transfer rumor: ${player.name} from ${club.name} linked with ${potentialClub.name} for $${fee}M`)
+              .then((groqArticle) => {
+                if (groqArticle) {
+                  articles[idx] = createArticle(week, season, 'Transfer', groqArticle.headline, 5);
+                  if (groqArticle.body) articles[idx].body = groqArticle.body;
+                }
+              })
+              .catch(() => { /* keep template */ })
+          );
         }
       }
     }
@@ -343,13 +349,18 @@ export async function generateWorldNews(leagues: League[], week: number, season:
       if (player) {
         const inj = generateInjuryForAI();
         if (inj) {
-          const groqArticle = await generateNewsArticle(`injury update: ${player.name} out for ${inj.weeksRemaining} weeks with ${inj.type} ${inj.bodyPart} injury`);
-          if (groqArticle) {
-            articles.push(createArticle(week, season, 'Injury', groqArticle.headline, 6));
-            if (groqArticle.body) articles[articles.length - 1].body = groqArticle.body;
-          } else {
-            articles.push(createArticle(week, season, 'Injury', `${player.name} out for ${inj.weeksRemaining} weeks with ${inj.description}.`, 6));
-          }
+          const idx = articles.length;
+          articles.push(createArticle(week, season, 'Injury', `${player.name} out for ${inj.weeksRemaining} weeks with ${inj.description}.`, 6));
+          groqPromises.push(
+            generateNewsArticle(`injury update: ${player.name} out for ${inj.weeksRemaining} weeks with ${inj.type} ${inj.bodyPart} injury`)
+              .then((groqArticle) => {
+                if (groqArticle) {
+                  articles[idx] = createArticle(week, season, 'Injury', groqArticle.headline, 6);
+                  if (groqArticle.body) articles[idx].body = groqArticle.body;
+                }
+              })
+              .catch(() => { /* keep template */ })
+          );
         }
       }
     }
@@ -357,14 +368,27 @@ export async function generateWorldNews(leagues: League[], week: number, season:
     if (Math.random() < 0.04 && week > 10) {
       const club = pick(league.clubs);
       const type = pick(['breaking transfer record', 'sensational signing', 'defensive reinforcement', 'wonderkid arrival']);
-      const groqArticle = await generateNewsArticle(`big money: ${club.name} completes a ${type}`);
-      if (groqArticle) {
-        articles.push(createArticle(week, season, 'Transfer', groqArticle.headline, 6));
-        if (groqArticle.body) articles[articles.length - 1].body = groqArticle.body;
-      } else {
-        articles.push(createArticle(week, season, 'Transfer', `Big money move: ${club.name} ${type}.`, 6));
-      }
+      const idx = articles.length;
+      articles.push(createArticle(week, season, 'Transfer', `Big money move: ${club.name} ${type}.`, 6));
+      groqPromises.push(
+        generateNewsArticle(`big money: ${club.name} completes a ${type}`)
+          .then((groqArticle) => {
+            if (groqArticle) {
+              articles[idx] = createArticle(week, season, 'Transfer', groqArticle.headline, 6);
+              if (groqArticle.body) articles[idx].body = groqArticle.body;
+            }
+          })
+          .catch(() => { /* keep template */ })
+      );
     }
+  }
+
+  // Wait for Groq enrichments but don't block beyond 5s total
+  if (groqPromises.length > 0) {
+    await Promise.race([
+      Promise.allSettled(groqPromises),
+      new Promise<void>((r) => setTimeout(r, 5000)),
+    ]);
   }
 
   return articles;

@@ -39,7 +39,10 @@ function stripEffects(text: string): string {
 }
 
 export async function generatePreMatchQuestions(opponent: string, playerForm: number, matchImportance: string = 'league'): Promise<PressQuestion[]> {
-  const groqResult = await groqPressQuestions(`Pre-match press conference before facing ${opponent}. Player form: ${playerForm}%. Match: ${matchImportance}.`);
+  let groqResult = null;
+  try {
+    groqResult = await groqPressQuestions(`Pre-match press conference before facing ${opponent}. Player form: ${playerForm}%. Match: ${matchImportance}.`);
+  } catch { /* Groq failed — fall back to templates */ }
   if (groqResult && groqResult.length >= 2) {
     return groqResult.slice(0, 3).map((q, i) => ({
       id: `groq-pre-${i}`,
@@ -108,7 +111,10 @@ export async function generatePreMatchQuestions(opponent: string, playerForm: nu
 }
 
 export async function generatePostMatchQuestions(result: 'Win' | 'Draw' | 'Loss', performance: Partial<MatchPerformance>, opponent: string): Promise<PressQuestion[]> {
-  const groqResult = await groqPressQuestions(`Post-match press conference after a ${result} against ${opponent}. Player scored: ${(performance.goals ?? 0) > 0 ? 'yes' : 'no'}.`);
+  let groqResult = null;
+  try {
+    groqResult = await groqPressQuestions(`Post-match press conference after a ${result} against ${opponent}. Player scored: ${(performance.goals ?? 0) > 0 ? 'yes' : 'no'}.`);
+  } catch { /* Groq failed — fall back to templates */ }
   if (groqResult && groqResult.length >= 2) {
     return groqResult.slice(0, 3).map((q, i) => ({
       id: `groq-post-${i}`,

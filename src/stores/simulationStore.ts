@@ -11,6 +11,7 @@ import {
   recordMatchResult,
   getLeagueTable,
   getLeagueTopScorers,
+  generateWorldNews,
   resetWorldCache,
   type SimMatchResult,
 } from '../simulation/worldSimulator';
@@ -167,6 +168,17 @@ export const useSimulationStore = create<
       worldWeek: round,
       currentSeasonData: buildSeasonData(activeLeague, seasonWeek),
     });
+
+    // Generate world news asynchronously (fire-and-forget)
+    generateWorldNews([activeLeague], round, seasonWeek)
+      .then((news) => {
+        if (news.length > 0) {
+          set((state) => ({
+            worldNews: [...news, ...state.worldNews].slice(0, 50),
+          }));
+        }
+      })
+      .catch(() => { /* silent */ });
   },
 
   getLeagueTable: (leagueName) => {

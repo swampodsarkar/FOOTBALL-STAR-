@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiMicrophone, HiCalendarDays, HiCheck, HiArrowLeft } from 'react-icons/hi2';
+import { HiMicrophone, HiCheck, HiArrowLeft } from 'react-icons/hi2';
 import { useGameStore } from '../../stores/gameStore';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Card from '../../components/ui/Card';

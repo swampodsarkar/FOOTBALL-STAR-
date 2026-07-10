@@ -82,35 +82,21 @@ export default function SocialPage() {
   const player = useGameStore((s) => s.player);
   const updatePlayer = useGameStore((s) => s.updatePlayer);
   const [feed, setFeed] = useState<Post[]>([]);
-  const [groqPosts, setGroqPosts] = useState<string[]>([]);
-  const [groqComments, setGroqComments] = useState<{ text: string; isPositive: boolean }[]>([]);
+  const [groqComments, setGroqComments] = useState<{ id: string; text: string; isPositive: boolean; likes: number }[]>([]);
   const [groqTrending, setGroqTrending] = useState<{ topic: string; engagement: number }[]>([]);
   const [groqLoaded, setGroqLoaded] = useState(false);
 
-  const lastMatchResult = player?.matchHistory[player.matchHistory.length - 1];
   const recentForm = player?.matchHistory.slice(-3) ?? [];
   const recentWins = recentForm.filter((m) => m.result === 'Win').length;
 
   if (!groqLoaded) {
     setGroqLoaded(true);
-    const context = player ? `player ${player.name}, position ${player.position}, recent form: ${recentWins}/3 wins, last match rating: ${lastMatchResult?.rating ?? 'N/A'}` : 'general';
-
-    generateSocialPost(`${context}, post about recent match`).then((p) => {
-      if (p) setGroqPosts((prev) => [...prev, p]);
-    });
-    generateSocialPost(`${context}, post about training`).then((p) => {
-      if (p) setGroqPosts((prev) => [...prev, p]);
-    });
-    generateSocialPost(`${context}, thank fans message`).then((p) => {
-      if (p) setGroqPosts((prev) => [...prev, p]);
-    });
-
     if (player) {
       generateFanComments(player.name, 'positive', 4).then((comments) => {
-        if (comments) setGroqComments((prev) => [...prev, ...comments.map((t) => ({ text: t, isPositive: true }))]);
+        if (comments) setGroqComments((prev) => [...prev, ...comments.map((t, i) => ({ id: `groq-comment-p-${i}-${Date.now()}`, text: t, isPositive: true, likes: Math.floor(Math.random() * 200) + 20 }))]);
       });
       generateFanComments(player.name, 'negative', 3).then((comments) => {
-        if (comments) setGroqComments((prev) => [...prev, ...comments.map((t) => ({ text: t, isPositive: false }))]);
+        if (comments) setGroqComments((prev) => [...prev, ...comments.map((t, i) => ({ id: `groq-comment-n-${i}-${Date.now()}`, text: t, isPositive: false, likes: Math.floor(Math.random() * 50) + 5 }))]);
       });
     }
 
@@ -155,23 +141,6 @@ export default function SocialPage() {
       };
     });
   }, [formLevel, player?.matchHistory.length, groqComments]);
-
-  const displayFeed = useMemo(() => {
-    if (feed.length > 0) return feed;
-    if (!player) return [];
-    const baseLikes = Math.floor(player.popularity * 150) + 500;
-    const baseEng = player.popularity;
-    const groqContents = groqPosts.length >= 3 ? groqPosts : [];
-    const templates = groqContents.length >= 3 ? groqContents : fallbackPostTemplates;
-    return templates.slice(0, 6).map((content, i) => ({
-      id: `post-${i}`,
-      content,
-      likes: Math.floor(baseLikes * (0.5 + Math.random() * 0.5)),
-      comments: Math.floor(Math.random() * 80) + 10,
-      engagement: Math.min(100, baseEng + Math.floor(Math.random() * 20 - 10)),
-      type: i % 3 === 0 ? 'performance' : i % 3 === 1 ? 'personal' : 'fan',
-    }));
-  }, [player, feed, groqPosts]);
 
   const trendingTopics = useMemo(() => {
     if (groqTrending.length > 0) return groqTrending;

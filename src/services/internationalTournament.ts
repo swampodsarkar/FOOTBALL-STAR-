@@ -1,4 +1,3 @@
-import type { AIPlayer } from '../types';
 import { NATIONAL_TEAMS } from './nationalTeamService';
 
 export interface TournamentDef {
@@ -56,7 +55,7 @@ export function isTournamentWindow(season: number, seasonWeek: number): Tourname
 function getTeamStrengthFromNation(name: string): number {
   const nt = NATIONAL_TEAMS[name];
   if (!nt) return 70;
-  return nt.ranking; // ranking 1-10 mapped to ~95-75 strength
+  return nt.worldRanking;
 }
 
 function simulateTournamentMatch(homeTeam: string, awayTeam: string): { homeScore: number; awayScore: number } {
@@ -74,7 +73,7 @@ function simulateTournamentMatch(homeTeam: string, awayTeam: string): { homeScor
 }
 
 function pickTopTeams(count: number): string[] {
-  const sorted = Object.entries(NATIONAL_TEAMS).sort((a, b) => a[1].ranking - b[1].ranking);
+  const sorted = Object.entries(NATIONAL_TEAMS).sort((a, b) => a[1].worldRanking - b[1].worldRanking);
   return sorted.slice(0, count).map(([name]) => name);
 }
 
@@ -108,7 +107,7 @@ export function generateTournamentBracket(season: number, tournament: Tournament
   return { tournament, season, teams, matches, winner };
 }
 
-export function generateTournamentNews(bracket: TournamentBracket, week: number, season: number): { headline: string; body: string }[] {
+export function generateTournamentNews(bracket: TournamentBracket, _week: number, _season: number): { headline: string; body: string }[] {
   const news: { headline: string; body: string }[] = [];
   const t = bracket.tournament;
 

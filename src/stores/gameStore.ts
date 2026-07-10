@@ -177,7 +177,7 @@ export const useGameStore = create<GameState & GameActions>()(
       },
 
       advanceWeek: () => {
-        const { currentWeek, seasonWeek, currentSeason, player, currentLeague } = get();
+        const { currentWeek, seasonWeek, currentSeason, player, currentLeague, currentClub } = get();
         const newWeek = currentWeek + 1;
         const newSeasonWeek = seasonWeek + 1;
         const isSeasonEnd = newWeek > 52;

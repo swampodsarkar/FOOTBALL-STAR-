@@ -2,6 +2,8 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY ?? '';
 const MODEL = 'llama3-70b-8192';
 
+let warnedNoKey = false;
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -28,6 +30,13 @@ function setCache<T>(key: string, data: T): void {
 }
 
 async function groqFetch(prompt: string, parseJson: boolean): Promise<string | null> {
+  if (!GROQ_API_KEY) {
+    if (!warnedNoKey) {
+      console.warn('[Groq] No VITE_GROQ_API_KEY set in .env — using fallback content');
+      warnedNoKey = true;
+    }
+    return null;
+  }
   try {
     const res = await fetch(GROQ_API_URL, {
       method: 'POST',
@@ -46,10 +55,14 @@ async function groqFetch(prompt: string, parseJson: boolean): Promise<string | n
       }),
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[Groq] API error: ${res.status} ${res.statusText}`);
+      return null;
+    }
     const json = await res.json();
     return json?.choices?.[0]?.message?.content?.trim() ?? null;
-  } catch {
+  } catch (err) {
+    console.warn('[Groq] Fetch failed:', err);
     return null;
   }
 }
