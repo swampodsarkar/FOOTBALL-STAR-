@@ -1,16 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HiNewspaper, HiMegaphone, HiUser, HiChevronDown } from 'react-icons/hi2';
+import { HiNewspaper, HiUser, HiChevronDown, HiGlobeAlt } from 'react-icons/hi2';
 import { useGameStore } from '../../stores/gameStore';
 import { useSimulationStore } from '../../stores/simulationStore';
+import { generateNewsArticle } from '../../services/groqService';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import PageTransition from '../../components/layout/PageTransition';
-
-
-type NewsFilter = 'All' | 'Transfers' | 'Injuries' | 'Matches' | 'Awards' | 'Breaking';
-
-const filters: NewsFilter[] = ['All', 'Breaking', 'Transfers', 'Injuries', 'Matches', 'Awards'];
 
 function getCategoryBadge(type: string): { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' } {
   const lower = type.toLowerCase();
@@ -20,39 +16,54 @@ function getCategoryBadge(type: string): { label: string; variant: 'success' | '
   if (lower.includes('award') || lower.includes('trophy')) return { label: 'Award', variant: 'warning' };
   if (lower.includes('manager') || lower.includes('sack')) return { label: 'Manager', variant: 'default' };
   if (lower.includes('title') || lower.includes('league')) return { label: 'League', variant: 'info' };
-  if (lower.includes('break') || lower.includes('breaking')) return { label: 'Breaking', variant: 'error' };
+  if (lower.includes('tournament')) return { label: 'Tournament', variant: 'warning' };
   return { label: 'League', variant: 'info' };
 }
 
 export default function NewsPage() {
-  const [activeFilter, setActiveFilter] = useState<NewsFilter>('All');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [groqHeadlines, setGroqHeadlines] = useState<{ headline: string; body: string }[]>([]);
   const inbox = useGameStore((s) => s.inbox);
   const worldNews = useSimulationStore((s) => s.worldNews);
 
+  // Auto-generate Groq news on mount
+  useEffect(() => {
+    const topics = [
+      'transfer window latest rumors and completed deals around Europe',
+      'surprise injury update for a top club star player',
+      'match of the week review with stunning goals and drama',
+      'manager under pressure after poor run of results',
+      'young wonderkid making headlines with incredible form',
+      'title race heating up as contenders drop points',
+    ];
+    const selected = topics.sort(() => Math.random() - 0.5).slice(0, 3);
+    for (const topic of selected) {
+      generateNewsArticle(topic).then((article) => {
+        if (article) setGroqHeadlines((prev) => [...prev, article]);
+      });
+    }
+  }, []);
+
   const allNews = useMemo(() => {
-    const combined = [...(worldNews ?? []), ...inbox];
-    const unique = combined.filter(
-      (item, index, self) => index === self.findIndex((t) => t.id === item.id)
-    );
-    return unique.sort((a, b) => {
-      if (b.importance !== a.importance) return b.importance - a.importance;
-      if (b.season !== a.season) return b.season - a.season;
-      return b.week - a.week;
-    });
-  }, [inbox, worldNews]);
-
-  const filtered = useMemo(() => {
-    if (activeFilter === 'All') return allNews;
-    if (activeFilter === 'Breaking') return allNews.filter((n) => n.importance >= 8);
-    const filterLower = activeFilter.toLowerCase();
-    return allNews.filter((n) => n.type.toLowerCase().includes(filterLower));
-  }, [allNews, activeFilter]);
-
-  const breakingNews = useMemo(
-    () => allNews.filter((n) => n.importance >= 8),
-    [allNews]
-  );
+    const groqArticles = groqHeadlines.map((g, i) => ({
+      id: `groq-auto-${i}-${Date.now()}`,
+      week: 0,
+      season: 0,
+      type: 'Headline',
+      headline: g.headline,
+      body: g.body,
+      importance: 6,
+      date: new Date().toISOString(),
+    }));
+    const combined = [...groqArticles, ...(worldNews ?? []), ...inbox];
+    return combined
+      .filter((item, index, self) => index === self.findIndex((t) => t.id === item.id))
+      .sort((a, b) => {
+        if (b.importance !== a.importance) return b.importance - a.importance;
+        if (b.season !== a.season) return b.season - a.season;
+        return b.week - a.week;
+      });
+  }, [inbox, worldNews, groqHeadlines]);
 
   return (
     <PageTransition>
@@ -67,57 +78,12 @@ export default function NewsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">World Football News</h1>
-            <p className="text-sm text-gray-400">The world's media</p>
+            <p className="text-sm text-gray-400">Latest headlines from around the world</p>
           </div>
         </motion.div>
 
-        <AnimatePresence>
-          {breakingNews.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <Card className="border-rose-500/30 bg-rose-600/5">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center shrink-0">
-                    <HiMegaphone className="w-4 h-4 text-rose-400" />
-                  </div>
-                  <div>
-                    <Badge variant="error">BREAKING</Badge>
-                    <p className="text-sm font-bold text-white mt-1">
-                      {breakingNews[0].headline}
-                    </p>
-                    <p className="text-xs text-rose-300/70 mt-0.5">
-                      {breakingNews[0].body.slice(0, 100)}
-                      {breakingNews[0].body.length > 100 ? '...' : ''}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800 overflow-x-auto">
-          {filters.map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                activeFilter === filter
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/25'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {filter}
-            </button>
-          ))}
-        </div>
-
         <div className="space-y-3">
-          {filtered.length === 0 && (
+          {allNews.length === 0 && (
             <Card>
               <p className="text-gray-500 text-sm text-center py-4">
                 No news articles found
@@ -125,10 +91,11 @@ export default function NewsPage() {
             </Card>
           )}
           <AnimatePresence>
-            {filtered.map((article, i) => {
+            {allNews.map((article, i) => {
               const { label: category, variant } = getCategoryBadge(article.type);
               const isExpanded = expandedId === article.id;
               const isPlayerRelated = inbox.some((n) => n.id === article.id);
+              const isGroq = article.id.startsWith('groq-auto-');
               return (
                 <motion.div
                   key={article.id}
@@ -139,25 +106,29 @@ export default function NewsPage() {
                 >
                   <Card
                     className={`relative overflow-hidden ${
-                      article.importance >= 8 ? 'border-rose-500/30' : ''
+                      article.importance >= 8 ? 'border-amber-500/30' : ''
                     }`}
                   >
                     {article.importance >= 8 && (
-                      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-rose-500 to-rose-600" />
-                    )}
-                    {article.importance < 8 && (
-                      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-gray-600 to-gray-700" />
+                      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-amber-500 to-amber-600" />
                     )}
                     <div className="flex items-start gap-3">
+                      {isGroq && (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
+                          <HiGlobeAlt className="w-5 h-5 text-white" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1.5">
                           <Badge variant={variant}>{category}</Badge>
                           {isPlayerRelated && (
                             <HiUser className="w-3.5 h-3.5 text-indigo-400" />
                           )}
-                          <span className="text-xs text-gray-500 ml-auto">
-                            W{article.week} &middot; S{article.season}
-                          </span>
+                          {article.week > 0 && (
+                            <span className="text-xs text-gray-500 ml-auto">
+                              W{article.week} &middot; S{article.season}
+                            </span>
+                          )}
                         </div>
                         <button
                           onClick={() =>
