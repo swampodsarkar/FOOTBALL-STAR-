@@ -79,6 +79,10 @@ export interface Player {
   awards: string[];
   matchHistory: MatchPerformance[];
   currentSeason: number;
+  internationalCaps: number;
+  internationalGoals: number;
+  internationalAssists: number;
+  internationalMotm: number;
 }
 
 export interface MatchPerformance {

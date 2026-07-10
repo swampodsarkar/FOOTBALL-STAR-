@@ -13,7 +13,9 @@ import {
 } from '../types';
 import { buildRealLeague, getPerformanceOffers, type ClubOffer } from '../services/footballData';
 import { saveCloud, loadCloud } from '../services/firebase';
+import { calculateMarketValue } from '../services/marketValue';
 import { useSimulationStore } from './simulationStore';
+import { isFIFAWindow, calculateSelectionScore, getCallUpStatus, resolveNationality, NATIONAL_TEAMS } from '../services/nationalTeamService';
 
 type GamePhase =
   | 'splash'
@@ -63,6 +65,11 @@ interface GameState {
   isLoading: boolean;
   showQTEResult: boolean;
   lastQTEEvent: QEEvent | null;
+  isFIFAWindow: boolean;
+  nationalTeamStatus: 'Called Up' | 'On Standby' | 'Not Called';
+  nationalTeamCountry: string;
+  selectionScore: number;
+  fifaWindowName: string;
 }
 
 interface GameActions {
@@ -114,6 +121,11 @@ export const useGameStore = create<GameState & GameActions>()(
       isLoading: false,
       showQTEResult: false,
       lastQTEEvent: null,
+      isFIFAWindow: false,
+      nationalTeamStatus: 'Not Called',
+      nationalTeamCountry: '',
+      selectionScore: 0,
+      fifaWindowName: '',
 
       setGamePhase: (phase) => set({ gamePhase: phase }),
 
@@ -121,6 +133,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const playerFixtures = (league.fixtures ?? []).filter(
           (f) => f.homeTeam.id === club.apiId || f.awayTeam.id === club.apiId
         );
+        const canonNat = resolveNationality(player.nationality);
         set({
           gamePhase: 'home',
           player,
@@ -136,6 +149,7 @@ export const useGameStore = create<GameState & GameActions>()(
           nextMatch: null,
           matchHistory: [],
           inbox: [],
+          nationalTeamCountry: NATIONAL_TEAMS[canonNat] ? canonNat : '',
         });
         get().scheduleNextMatch();
         useSimulationStore
@@ -144,7 +158,7 @@ export const useGameStore = create<GameState & GameActions>()(
       },
 
       advanceWeek: () => {
-        const { currentWeek, seasonWeek, currentSeason } = get();
+        const { currentWeek, seasonWeek, currentSeason, player } = get();
         const newWeek = currentWeek + 1;
         const newSeasonWeek = seasonWeek + 1;
         let newSeason = currentSeason;
@@ -159,12 +173,75 @@ export const useGameStore = create<GameState & GameActions>()(
           transferWindow = 'Winter';
         }
 
+        // FIFA Window detection
+        const window = isFIFAWindow(newSeasonWeek);
+        let natStatus = 'Not Called' as 'Called Up' | 'On Standby' | 'Not Called';
+        let natCountry = '';
+        let selScore = 0;
+        let fifaName = '';
+
+        if (window && player) {
+          fifaName = window.name;
+          const canonNat = resolveNationality(player.nationality);
+          if (NATIONAL_TEAMS[canonNat]) {
+            selScore = Math.round(calculateSelectionScore(player));
+            const status = getCallUpStatus(selScore, player);
+            natStatus = status;
+            natCountry = canonNat;
+
+            if (status === 'Called Up') {
+              // Add news about call-up
+              const existing = get().inbox;
+              if (!existing.some((n) => n.type === 'National Team Call-Up')) {
+                get().addInboxItem({
+                  id: `nt-callup-${Date.now()}`,
+                  week: newSeasonWeek,
+                  season: newSeason,
+                  type: 'National Team Call-Up',
+                  headline: `Called up to ${canonNat} national team!`,
+                  body: `You have been selected for the ${canonNat} squad during the ${window.name} FIFA window. Your selection score: ${selScore}/100.`,
+                  importance: 8,
+                  date: new Date().toISOString(),
+                });
+              }
+            } else if (status === 'On Standby') {
+              get().addInboxItem({
+                id: `nt-standby-${Date.now()}`,
+                week: newSeasonWeek,
+                season: newSeason,
+                type: 'National Team Standby',
+                headline: `On standby for ${canonNat} national team`,
+                body: `You are on standby for the ${canonNat} squad. Keep performing well to secure a spot.`,
+                importance: 5,
+                date: new Date().toISOString(),
+              });
+            }
+          }
+        } else {
+          // Clear national team status when not in FIFA window
+          natStatus = 'Not Called';
+          natCountry = '';
+          selScore = 0;
+          fifaName = '';
+        }
+
         set({
           currentWeek: newWeek > 52 ? 1 : newWeek,
           currentSeason: newSeason,
           seasonWeek: newWeek > 52 ? 1 : newSeasonWeek,
           transferWindow,
+          isFIFAWindow: !!window,
+          nationalTeamStatus: natStatus,
+          nationalTeamCountry: natCountry,
+          selectionScore: selScore,
+          fifaWindowName: fifaName,
         });
+
+        // Recalculate market value weekly
+        if (player) {
+          const newMV = calculateMarketValue(player);
+          get().updatePlayer({ marketValue: newMV });
+        }
 
         const lg = get().currentLeague;
         useSimulationStore
@@ -379,6 +456,11 @@ export const useGameStore = create<GameState & GameActions>()(
         matchHistory: state.matchHistory,
         inbox: state.inbox,
         pendingOffers: state.pendingOffers,
+        isFIFAWindow: state.isFIFAWindow,
+        nationalTeamStatus: state.nationalTeamStatus,
+        nationalTeamCountry: state.nationalTeamCountry,
+        selectionScore: state.selectionScore,
+        fifaWindowName: state.fifaWindowName,
       }),
     }
   )

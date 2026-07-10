@@ -230,6 +230,10 @@ export default function CreatePlayerPage() {
       awards: [],
       matchHistory: [],
       currentSeason: 1,
+      internationalCaps: 0,
+      internationalGoals: 0,
+      internationalAssists: 0,
+      internationalMotm: 0,
     };
 
     useGameStore.setState({ player });

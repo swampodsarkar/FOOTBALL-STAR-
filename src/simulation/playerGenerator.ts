@@ -330,6 +330,10 @@ export function generatePlayer(options: {
     businesses: [],
     awards: [],
     matchHistory: [],
-    currentSeason: 1,
-  };
+      currentSeason: 1,
+      internationalCaps: 0,
+      internationalGoals: 0,
+      internationalAssists: 0,
+      internationalMotm: 0,
+    };
 }

@@ -22,7 +22,15 @@ import {
   playerTeamWinProbability,
   resolveQTESkill,
 } from '../../simulation/matchSimulation';
-import type { MatchState, QTEResult, QTEType, MatchPerformance, MatchResult } from '../../types';
+import {
+  applyRatingEvents,
+  getRatingLabel,
+  getRatingColor,
+  BASE_RATING,
+  type RatingEvent,
+} from '../../simulation/ratingSystem';
+import { calculateMarketValue } from '../../services/marketValue';
+import type { MatchState, QTEResult, QTEType, MatchPerformance, MatchResult, Player } from '../../types';
 import { useSimulationStore } from '../../stores/simulationStore';
 
 const QTE_TYPES_BY_POSITION: Record<string, QTEType[]> = {
@@ -172,6 +180,8 @@ export default function MatchPage() {
   const [playerAssists, setPlayerAssists] = useState(0);
   const [isHalfTime, setIsHalfTime] = useState(false);
   const [isFullTime, setIsFullTime] = useState(false);
+  const [computedFinalRating, setComputedFinalRating] = useState(0);
+  const [computedFinalLabel, setComputedFinalLabel] = useState('');
   const [score, setScore] = useState({ home: 0, away: 0 });
   const [stats, setStats] = useState({
     possession: { home: 50, away: 50 },
@@ -179,7 +189,7 @@ export default function MatchPage() {
     shots: { home: 0, away: 0 },
     passAccuracy: { home: 85, away: 85 },
     momentum: 50,
-    playerRating: 6.0,
+    playerRating: BASE_RATING,
   });
 
   const commentaryRef = useRef<HTMLDivElement>(null);
@@ -206,7 +216,7 @@ export default function MatchPage() {
       shots: { home: 0, away: 0 },
       passAccuracy: { home: 85, away: 83 },
       playerEnergy: player.physical.energy,
-      playerRating: 6.0,
+    playerRating: BASE_RATING,
       commentary: 'The match is about to begin!',
       isPlayerTeam: nextMatch.isHome ? 'home' : 'away',
       qteEvents: [],
@@ -466,13 +476,89 @@ export default function MatchPage() {
     }
   }, [commentary]);
 
+  function generateMatchEvents(
+    goals: number,
+    assists: number,
+    pos: string,
+    isGK: boolean,
+    matchResult: MatchResult,
+  ): RatingEvent[] {
+    const events: RatingEvent[] = [];
+    if (goals > 0) {
+      events.push({ type: 'goal', count: goals });
+      // match-winner check
+      if (matchResult === 'Win' && goals > 0) {
+        events.push({ type: 'matchWinnerGoal', count: 1 });
+      }
+    }
+    if (assists > 0) events.push({ type: 'assist', count: assists });
+    // Key passes = roughly assists*2 + a random factor
+    const keyPasses = assists * 2 + Math.floor(Math.random() * 3);
+    if (keyPasses > 0) events.push({ type: 'keyPass', count: keyPasses });
+    // Big chances = goals + random
+    const bigChances = goals + Math.floor(Math.random() * 2);
+    if (bigChances > 0) events.push({ type: 'bigChanceCreated', count: bigChances });
+    // Dribbles — attackers dribble more
+    const attackingPositions = ['ST', 'CF', 'LW', 'RW', 'CAM', 'LM', 'RM'];
+    const dribbles = attackingPositions.includes(pos) ? Math.floor(Math.random() * 6) + 2 : Math.floor(Math.random() * 3);
+    if (dribbles > 0) events.push({ type: 'successfulDribble', count: dribbles });
+    // Tackles — defenders more
+    const defendingPositions = ['CB', 'LB', 'RB', 'CDM'];
+    const tackles = defendingPositions.includes(pos) ? Math.floor(Math.random() * 8) + 4 : Math.floor(Math.random() * 4);
+    if (tackles > 0) events.push({ type: 'tackleWon', count: tackles });
+    // Interceptions
+    const interceptions = defendingPositions.includes(pos) ? Math.floor(Math.random() * 6) + 3 : Math.floor(Math.random() * 3);
+    if (interceptions > 0) events.push({ type: 'interception', count: interceptions });
+    // Clearances — mostly defenders
+    const clearances = defendingPositions.includes(pos) ? Math.floor(Math.random() * 10) + 5 : Math.floor(Math.random() * 2);
+    if (clearances > 0) events.push({ type: 'clearance', count: clearances });
+    // Pass accuracy bonus
+    if (Math.random() > 0.5) events.push({ type: 'accuratePassHigh', count: 1 });
+    // Negative events — small random chance
+    if (Math.random() < 0.3) events.push({ type: 'wrongPass', count: Math.floor(Math.random() * 3) + 1 });
+    if (Math.random() < 0.2) events.push({ type: 'lostPossession', count: Math.floor(Math.random() * 4) + 1 });
+    if (Math.random() < 0.1) events.push({ type: 'missedBigChance', count: 1 });
+    // GK-specific
+    if (isGK) {
+      const saves = Math.floor(Math.random() * 6) + 2;
+      if (saves > 0) events.push({ type: 'save', count: saves });
+      if (matchResult === 'Win' || matchResult === 'Draw') {
+        events.push({ type: 'cleanSheet', count: 1 });
+      }
+    }
+    // Defender clean sheet bonus
+    if (defendingPositions.includes(pos) && goals === 0 && (matchResult === 'Win' || matchResult === 'Draw')) {
+      events.push({ type: 'cleanSheet', count: 1 });
+    }
+
+    return events;
+  }
+
   useEffect(() => {
     if (showResult) {
       advanceRef.current = window.setTimeout(() => {
-        const finalRating = stats.playerRating;
+        const isGK = player?.position === 'GK';
         const result: MatchResult =
           score.home > score.away ? 'Win' : score.home < score.away ? 'Loss' : 'Draw';
-        const motm = finalRating >= 8 || (playerGoals > 0 && finalRating >= 7.5);
+
+        const rawEvents = generateMatchEvents(playerGoals, playerAssists, player?.position ?? 'ST', isGK, result);
+        // Add QTE outcome approximations
+        const qteEventCount = matchEvents.filter((e) => e.type === 'QTE').length;
+        if (qteEventCount > 0) {
+          rawEvents.push({ type: 'keyPass', count: Math.min(qteEventCount, 3) });
+        }
+
+        // MOTM if rating is high enough — apply after initial calc
+        let rating = applyRatingEvents(rawEvents);
+        const motm = rating >= 8 || (playerGoals > 0 && rating >= 7.5);
+        if (motm) {
+          rawEvents.push({ type: 'playerOfMatch', count: 1 });
+          rating = applyRatingEvents(rawEvents);
+        }
+
+        const finalRating = Math.round(rating * 10) / 10;
+        setComputedFinalRating(finalRating);
+        setComputedFinalLabel(getRatingLabel(finalRating));
         const xpEarned = Math.round(
           finalRating * 8 +
             (result === 'Win' ? 20 : result === 'Draw' ? 10 : 5) +
@@ -493,6 +579,21 @@ export default function MatchPage() {
             0,
             100
           );
+          const newManagerTrust = clamp(
+            p.managerTrust + (finalRating >= 7.5 ? 3 : finalRating >= 6.5 ? 1 : -2),
+            0,
+            100
+          );
+          const newConfidence = clamp(
+            p.confidence + (result === 'Win' ? 5 : result === 'Loss' ? -3 : 1),
+            0,
+            100
+          );
+          const newPopularity = clamp(
+            p.popularity + (motm ? 3 : result === 'Win' ? 1 : 0) + (playerGoals > 0 ? 1 : 0),
+            0,
+            100
+          );
 
           const perf: MatchPerformance = {
             week: nextMatch?.week ?? 1,
@@ -509,13 +610,13 @@ export default function MatchPage() {
             possessionWon: Math.floor(Math.random() * 8),
             distanceCovered: Math.round((9 + Math.random() * 3) * 10) / 10,
             passAccuracy: 75 + Math.floor(Math.random() * 20),
-            rating: Math.round(finalRating * 10) / 10,
+            rating: finalRating,
             manOfTheMatch: motm,
             xpEarned,
             minutesPlayed: 90,
           };
 
-          st.updatePlayer({
+          const updatedPlayer = {
             seasonGoals: p.seasonGoals + playerGoals,
             seasonAssists: p.seasonAssists + playerAssists,
             seasonAppearances: p.seasonAppearances + 1,
@@ -525,9 +626,18 @@ export default function MatchPage() {
             totalXp: p.totalXp + xpEarned,
             form: newForm,
             morale: newMorale,
+            managerTrust: newManagerTrust,
+            confidence: newConfidence,
+            popularity: newPopularity,
             matchHistory: [...p.matchHistory, perf],
-          });
+          };
+          st.updatePlayer(updatedPlayer);
           st.addMatchPerformance(perf);
+
+          // Recalculate market value after match
+          const updatedPlayerFull = { ...p, ...updatedPlayer };
+          const newMarketValue = calculateMarketValue(updatedPlayerFull as Player);
+          st.updatePlayer({ marketValue: newMarketValue });
         }
 
           st.generateClubOffers();
@@ -730,7 +840,9 @@ export default function MatchPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Rating</span>
-                      <span className="text-white font-semibold">{stats.playerRating.toFixed(1)}</span>
+                      <span className={`font-semibold ${getRatingColor(computedFinalLabel)}`}>
+                        {computedFinalRating.toFixed(1)} — {computedFinalLabel}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Goals (this match)</span>
