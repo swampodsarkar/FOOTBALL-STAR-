@@ -1,10 +1,9 @@
 import type { Club, Fixture, League, LeagueName } from '../types';
 import { createClubFromApiTeam } from '../data/leagues';
 
-// Hardcoded football-data.org key so the app works without any server/env setup.
-// NOTE: a browser app cannot truly hide a key; this is exposed in the bundle.
-const API_KEY = 'f501f01ef13346538118ac31dcb0d18c';
-const BASE = 'https://api.football-data.org/v4';
+// All football-data.org calls go through the serverless proxy at /api/football
+// (see api/football.js). This avoids CORS and keeps the API key off the client.
+const BASE = '/api/football';
 
 export interface SupportedLeague {
   code: string;
@@ -52,9 +51,7 @@ const emblemCache: Record<string, string> = {};
 async function fdFetch<T>(path: string, retries = 4): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt < retries; attempt++) {
-    const res = await fetch(`${BASE}${path}`, {
-      headers: { 'X-Auth-Token': API_KEY },
-    });
+    const res = await fetch(`${BASE}${path}`);
     if (res.status === 429) {
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       continue;
