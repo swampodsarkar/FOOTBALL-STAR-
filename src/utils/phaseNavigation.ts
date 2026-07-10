@@ -8,6 +8,7 @@ type GamePhase =
   | 'createPlayer'
   | 'selectLeague'
   | 'selectClub'
+  | 'startOffers'
   | 'home'
   | 'calendar'
   | 'match'
@@ -29,6 +30,7 @@ const phaseRoute: Record<GamePhase, string> = {
   createPlayer: '/career/new/player',
   selectLeague: '/career/new/league',
   selectClub: '/career/new/club',
+  startOffers: '/career/new/offers',
   home: '/career/home',
   calendar: '/career/calendar',
   match: '/career/match',

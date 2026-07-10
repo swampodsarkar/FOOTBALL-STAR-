@@ -529,6 +529,7 @@ export default function MatchPage() {
           st.addMatchPerformance(perf);
         }
 
+        st.generateClubOffers();
         st.advanceWeek();
         st.scheduleNextMatch();
         endMatch();

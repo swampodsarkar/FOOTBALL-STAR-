@@ -422,7 +422,7 @@ const CLUB_REPUTATION: Record<string, number> = {
   'Derby County': 71, 'Luton Town': 71,
 };
 
-function estimateReputation(name: string): number {
+export function estimateReputation(name: string): number {
   if (CLUB_REPUTATION[name] != null) return CLUB_REPUTATION[name];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;

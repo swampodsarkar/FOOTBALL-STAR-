@@ -11,6 +11,7 @@ import {
   QTEResult,
   Fixture,
 } from '../types';
+import { buildRealLeague, getPerformanceOffers, type ClubOffer } from '../services/footballData';
 
 type GamePhase =
   | 'splash'
@@ -18,6 +19,7 @@ type GamePhase =
   | 'createPlayer'
   | 'selectLeague'
   | 'selectClub'
+  | 'startOffers'
   | 'home'
   | 'calendar'
   | 'match'
@@ -55,6 +57,7 @@ interface GameState {
   } | null;
   matchHistory: MatchPerformance[];
   inbox: NewsArticle[];
+  pendingOffers: ClubOffer[];
   isLoading: boolean;
   showQTEResult: boolean;
   lastQTEEvent: QEEvent | null;
@@ -81,6 +84,10 @@ interface GameActions {
   triggerQTEEvent: (event: QEEvent) => void;
   resolveQTE: (result: QTEResult) => void;
   scheduleNextMatch: () => void;
+  addClubOffer: (offer: ClubOffer) => void;
+  acceptClubOffer: (id: string) => Promise<void>;
+  dismissClubOffer: (id: string) => void;
+  generateClubOffers: () => void;
 }
 
 export const useGameStore = create<GameState & GameActions>()(
@@ -100,6 +107,7 @@ export const useGameStore = create<GameState & GameActions>()(
       nextMatch: null,
       matchHistory: [],
       inbox: [],
+      pendingOffers: [],
       isLoading: false,
       showQTEResult: false,
       lastQTEEvent: null,
@@ -249,6 +257,69 @@ export const useGameStore = create<GameState & GameActions>()(
           fixtureIndex: fixtureIndex + 1,
         });
       },
+
+      addClubOffer: (offer) =>
+        set((state) => ({ pendingOffers: [...state.pendingOffers, offer] })),
+
+      acceptClubOffer: async (id) => {
+        const { pendingOffers } = get();
+        const offer = pendingOffers.find((o) => o.id === id);
+        if (!offer) return;
+        const league = await buildRealLeague(offer.code);
+        const playerFixtures = (league.fixtures ?? []).filter(
+          (f) => f.homeTeam.id === offer.club.apiId || f.awayTeam.id === offer.club.apiId
+        );
+        set((state) => ({
+          currentClub: offer.club,
+          currentLeague: league,
+          fixtures: playerFixtures,
+          fixtureIndex: 0,
+          nextMatch: null,
+          pendingOffers: state.pendingOffers.filter((o) => o.id !== id),
+        }));
+        get().scheduleNextMatch();
+        get().addInboxItem({
+          id: `offer-accepted-${offer.club.id}-${Date.now()}`,
+          week: get().currentWeek,
+          season: get().currentSeason,
+          type: 'Transfer',
+          headline: `You signed for ${offer.club.name}!`,
+          body: `A new chapter begins at ${offer.club.name} in the ${offer.leagueName}.`,
+          importance: 5,
+          date: new Date().toISOString(),
+        });
+      },
+
+      dismissClubOffer: (id) =>
+        set((state) => ({
+          pendingOffers: state.pendingOffers.filter((o) => o.id !== id),
+        })),
+
+      generateClubOffers: () => {
+        const { matchHistory, currentClub, pendingOffers } = get();
+        if (!currentClub) return;
+        const recent = matchHistory.slice(-5);
+        if (recent.length < 3) return;
+        const avg = recent.reduce((s, m) => s + m.rating, 0) / recent.length;
+        if (avg < 7.0) return; // only strong form attracts interest
+        const offers = getPerformanceOffers(currentClub.reputation, 3);
+        if (offers.length === 0) return;
+        const existingIds = new Set(pendingOffers.map((o) => o.club.id));
+        const newOffers = offers.filter((o) => !existingIds.has(o.club.id));
+        if (newOffers.length === 0) return;
+        set((state) => ({ pendingOffers: [...state.pendingOffers, ...newOffers] }));
+        const top = newOffers[0];
+        get().addInboxItem({
+          id: `offer-interest-${top.club.id}-${Date.now()}`,
+          week: get().currentWeek,
+          season: get().currentSeason,
+          type: 'Transfer',
+          headline: `${top.club.name} is interested in signing you`,
+          body: `Your recent form (avg ${avg.toFixed(1)} rating) has caught the eye of ${top.club.name} (${top.leagueName}).`,
+          importance: 4,
+          date: new Date().toISOString(),
+        });
+      },
     }),
     {
       name: 'football-career-game',
@@ -266,6 +337,7 @@ export const useGameStore = create<GameState & GameActions>()(
         nextMatch: state.nextMatch,
         matchHistory: state.matchHistory,
         inbox: state.inbox,
+        pendingOffers: state.pendingOffers,
       }),
     }
   )

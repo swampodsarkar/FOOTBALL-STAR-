@@ -1,6 +1,6 @@
 import realData from '../data/realFootballData.json';
 import type { Club, Fixture, League, LeagueName } from '../types';
-import { createClubFromApiTeam } from '../data/leagues';
+import { createClubFromApiTeam, estimateReputation } from '../data/leagues';
 
 export interface SupportedLeague {
   code: string;
@@ -58,6 +58,101 @@ export async function getLeagueLogos(): Promise<Record<string, string>> {
     if (emblem) logos[lg.code] = emblem;
   }
   return logos;
+}
+
+export interface ClubOffer {
+  id: string;
+  club: Club;
+  code: string;
+  leagueName: LeagueName;
+  reputation: number;
+}
+
+interface Candidate {
+  code: string;
+  leagueName: LeagueName;
+  teamName: string;
+  reputation: number;
+}
+
+// Build a lightweight candidate list of every club across all leagues with its
+// estimated reputation (cheap — no squad generation).
+function buildCandidates(): Candidate[] {
+  const candidates: Candidate[] = [];
+  for (const lg of SUPPORTED_LEAGUES) {
+    const data = DATA[lg.code];
+    if (!data) continue;
+    for (const t of data.teams) {
+      candidates.push({
+        code: lg.code,
+        leagueName: lg.name,
+        teamName: t.name,
+        reputation: estimateReputation(t.name),
+      });
+    }
+  }
+  return candidates;
+}
+
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const copy = [...arr];
+  const out: T[] = [];
+  while (out.length < n && copy.length) {
+    const i = Math.floor(Math.random() * copy.length);
+    out.push(copy.splice(i, 1)[0]);
+  }
+  return out;
+}
+
+function candidateToOffer(c: Candidate, usedIds: Set<string>): ClubOffer | null {
+  const data = DATA[c.code];
+  const team = data?.teams.find((t) => t.name === c.teamName);
+  if (!team) return null;
+  const idx = data!.teams.indexOf(team) + 1;
+  const club = createClubFromApiTeam(
+    {
+      id: team.id,
+      name: team.name,
+      shortName: team.shortName ?? undefined,
+      tla: team.tla ?? undefined,
+      crest: team.crest ?? undefined,
+    },
+    c.leagueName,
+    idx
+  );
+  if (usedIds.has(club.id)) return null;
+  usedIds.add(club.id);
+  return {
+    id: `offer-${club.id}-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
+    club,
+    code: c.code,
+    leagueName: c.leagueName,
+    reputation: c.reputation,
+  };
+}
+
+// New-career start: 3 offers from the lowest-rated clubs across ALL leagues.
+export function getStartingOffers(count = 3): ClubOffer[] {
+  const candidates = buildCandidates().sort((a, b) => a.reputation - b.reputation);
+  // Take from the bottom pool (lowest 40%) and randomize for variety.
+  const pool = candidates.slice(0, Math.max(count * 3, 12));
+  const chosen = pickRandom(pool, count);
+  const used = new Set<string>();
+  return chosen
+    .map((c) => candidateToOffer(c, used))
+    .filter((o): o is ClubOffer => o !== null);
+}
+
+// Performance-based: better clubs (above current reputation) show interest.
+export function getPerformanceOffers(currentReputation: number, count = 3): ClubOffer[] {
+  const candidates = buildCandidates().filter(
+    (c) => c.reputation >= currentReputation + 2 && c.reputation <= currentReputation + 30
+  );
+  const chosen = pickRandom(candidates, count);
+  const used = new Set<string>();
+  return chosen
+    .map((c) => candidateToOffer(c, used))
+    .filter((o): o is ClubOffer => o !== null);
 }
 
 export async function buildRealLeague(code: string): Promise<League> {

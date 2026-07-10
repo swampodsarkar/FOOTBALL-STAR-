@@ -123,6 +123,10 @@ export default function TransferPage() {
   const acceptTransfer = useSimulationStore((s) => s.acceptTransfer);
   const rejectTransfer = useSimulationStore((s) => s.rejectTransfer);
 
+  const pendingOffers = useGameStore((s) => s.pendingOffers);
+  const acceptClubOffer = useGameStore((s) => s.acceptClubOffer);
+  const dismissClubOffer = useGameStore((s) => s.dismissClubOffer);
+
   const [activeTab, setActiveTab] = useState<Tab>('incoming');
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
 
@@ -211,6 +215,57 @@ export default function TransferPage() {
                 Review and decide on each proposal.
               </p>
             </div>
+
+            {pendingOffers.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-wider text-emerald-400 font-semibold">
+                  Club Career Offers
+                </p>
+                {pendingOffers.map((offer) => (
+                  <motion.div
+                    key={offer.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-gray-900 rounded-xl border border-emerald-500/30 space-y-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      {offer.club.crest ? (
+                        <img src={offer.club.crest} alt={offer.club.name} className="w-10 h-10 object-contain" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                          <HiBuildingOffice className="w-5 h-5 text-emerald-400" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-bold text-white">{offer.club.name}</p>
+                        <p className="text-xs text-gray-500">{offer.leagueName} &middot; Rep {offer.reputation}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-1"
+                        icon={<HiCheck className="w-4 h-4" />}
+                        onClick={() => acceptClubOffer(offer.id)}
+                      >
+                        Accept Move
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1"
+                        icon={<HiXMark className="w-4 h-4" />}
+                        onClick={() => dismissClubOffer(offer.id)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
 
             {incomingOffers.length === 0 ? (
               <div className="text-center py-12">

@@ -209,7 +209,7 @@ export default function CreatePlayerPage() {
     };
 
     useGameStore.setState({ player });
-    goTo('selectLeague');
+    goTo('startOffers');
   };
 
   const renderStepIndicator = () => (

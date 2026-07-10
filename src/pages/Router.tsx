@@ -8,6 +8,7 @@ const WelcomePage = lazy(() => import('../features/welcome/WelcomePage'));
 const CreatePlayerPage = lazy(() => import('../features/createPlayer/CreatePlayerPage'));
 const SelectLeaguePage = lazy(() => import('../features/selectLeague/SelectLeaguePage'));
 const SelectClubPage = lazy(() => import('../features/selectClub/SelectClubPage'));
+const StartOffersPage = lazy(() => import('../features/selectLeague/StartOffersPage'));
 const HomePage = lazy(() => import('../features/home/HomePage'));
 const CalendarPage = lazy(() => import('../features/calendar/CalendarPage'));
 const MatchPage = lazy(() => import('../features/match/MatchPage'));
@@ -54,6 +55,7 @@ export default function AppRouter() {
         <Route path="/career/new/player" element={<SuspenseWrapper><CreatePlayerPage /></SuspenseWrapper>} />
         <Route path="/career/new/league" element={<SuspenseWrapper><SelectLeaguePage /></SuspenseWrapper>} />
         <Route path="/career/new/club" element={<SuspenseWrapper><SelectClubPage /></SuspenseWrapper>} />
+        <Route path="/career/new/offers" element={<SuspenseWrapper><StartOffersPage /></SuspenseWrapper>} />
 
         <Route path="/career/home" element={<SuspenseWrapper><CareerLayout><HomePage /></CareerLayout></SuspenseWrapper>} />
         <Route path="/career/calendar" element={<SuspenseWrapper><CareerLayout><CalendarPage /></CareerLayout></SuspenseWrapper>} />
