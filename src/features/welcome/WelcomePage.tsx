@@ -76,15 +76,6 @@ export default function WelcomePage() {
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="lg"
-          className="w-full"
-          icon={<HiCog6Tooth className="w-5 h-5" />}
-          onClick={() => goTo('settings')}
-        >
-          Settings
-        </Button>
       </motion.div>
 
       <motion.div variants={itemVariants} className="absolute bottom-6 text-center">

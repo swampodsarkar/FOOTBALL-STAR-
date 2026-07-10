@@ -6,6 +6,7 @@ import ErrorBoundary from '../components/ui/ErrorBoundary';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const SplashPage = lazy(() => import('../features/splash/SplashPage'));
+const LoadingScreen = lazy(() => import('../features/loading/LoadingScreen'));
 const WelcomePage = lazy(() => import('../features/welcome/WelcomePage'));
 const CreatePlayerPage = lazy(() => import('../features/createPlayer/CreatePlayerPage'));
 const SelectLeaguePage = lazy(() => import('../features/selectLeague/SelectLeaguePage'));
@@ -49,6 +50,7 @@ export default function AppRouter() {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<SuspenseWrapper><SplashPage /></SuspenseWrapper>} />
+        <Route path="/loading" element={<SuspenseWrapper><LoadingScreen /></SuspenseWrapper>} />
         <Route path="/welcome" element={<SuspenseWrapper><WelcomePage /></SuspenseWrapper>} />
         <Route path="/career/new/player" element={<SuspenseWrapper><CreatePlayerPage /></SuspenseWrapper>} />
         <Route path="/career/new/league" element={<SuspenseWrapper><SelectLeaguePage /></SuspenseWrapper>} />

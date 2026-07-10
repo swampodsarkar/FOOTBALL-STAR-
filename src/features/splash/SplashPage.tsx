@@ -8,7 +8,7 @@ export default function SplashPage() {
   const { goTo } = usePhaseNavigation();
 
   const proceed = useCallback(() => {
-    goTo('welcome');
+    goTo('loading');
   }, [goTo]);
 
   useEffect(() => {

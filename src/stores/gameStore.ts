@@ -52,7 +52,8 @@ type GamePhase =
   | 'social'
   | 'careerTimeline'
   | 'settings'
-  | 'press';
+  | 'press'
+  | 'loading';
 
 type TransferWindowType = 'Summer' | 'Winter' | 'None';
 

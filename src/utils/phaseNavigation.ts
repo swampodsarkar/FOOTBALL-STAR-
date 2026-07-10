@@ -23,10 +23,12 @@ type GamePhase =
   | 'social'
   | 'careerTimeline'
   | 'settings'
-  | 'press';
+  | 'press'
+  | 'loading';
 
 const phaseRoute: Record<GamePhase, string> = {
   splash: '/',
+  loading: '/loading',
   welcome: '/welcome',
   createPlayer: '/career/new/player',
   selectLeague: '/career/new/league',
