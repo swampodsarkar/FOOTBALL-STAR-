@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { HiPlay, HiFolderOpen, HiCog6Tooth } from 'react-icons/hi2';
+import { HiPlay, HiFolderOpen } from 'react-icons/hi2';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Button from '../../components/ui/Button';
 import mainMenuBg from '../../assets/bd.png';
