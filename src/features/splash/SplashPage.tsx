@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { HiTrophy } from 'react-icons/hi2';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
+import mainMenuBg from '../../assets/bd.png';
 
 export default function SplashPage() {
   const { goTo } = usePhaseNavigation();
@@ -9,6 +10,11 @@ export default function SplashPage() {
   const proceed = useCallback(() => {
     goTo('welcome');
   }, [goTo]);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = mainMenuBg;
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(proceed, 3000);

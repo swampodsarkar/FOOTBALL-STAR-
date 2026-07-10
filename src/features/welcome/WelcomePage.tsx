@@ -26,14 +26,15 @@ export default function WelcomePage() {
       initial="hidden"
       animate="visible"
       exit={{ opacity: 0, y: -20 }}
-      className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-900 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      style={{
+        backgroundColor: '#0b1020',
+        backgroundImage: `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), url(${mainMenuBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
     >
-      <img
-        src={mainMenuBg}
-        alt=""
-        className="absolute inset-0 -z-10 h-full w-full object-cover"
-        style={{ filter: 'brightness(0.5)', transform: 'scale(1.02)' }}
-      />
 
       <motion.div variants={itemVariants} className="text-center mb-12">
         <h1 className="text-5xl md:text-7xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-300 bg-clip-text text-transparent">
