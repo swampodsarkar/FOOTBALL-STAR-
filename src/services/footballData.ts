@@ -29,6 +29,7 @@ interface BakedTeam {
   shortName?: string | null;
   tla?: string | null;
   crest?: string | null;
+  players?: string[];
 }
 
 interface BakedMatch {
@@ -110,13 +111,14 @@ function candidateToOffer(c: Candidate, usedIds: Set<string>): ClubOffer | null 
   if (!team) return null;
   const idx = data!.teams.indexOf(team) + 1;
   const club = createClubFromApiTeam(
-    {
-      id: team.id,
-      name: team.name,
-      shortName: team.shortName ?? undefined,
-      tla: team.tla ?? undefined,
-      crest: team.crest ?? undefined,
-    },
+      {
+        id: team.id,
+        name: team.name,
+        shortName: team.shortName ?? undefined,
+        tla: team.tla ?? undefined,
+        crest: team.crest ?? undefined,
+        players: team.players,
+      },
     c.leagueName,
     idx
   );

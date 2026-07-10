@@ -310,7 +310,8 @@ export function createSquad(
   clubRep: number,
   _namePool: string[],
   nationality: string,
-  agePool: number[]
+  agePool: number[],
+  realNames?: string[]
 ): AIPlayer[] {
   const firstNames: string[] = [];
   const lastNames: string[] = [];
@@ -335,7 +336,10 @@ export function createSquad(
   });
 
   return positions.map((pos, i) => {
-    const name = `${firstNames[i % firstNames.length]} ${lastNames[(i * 3 + clubRep) % lastNames.length]}`;
+    const name =
+      realNames && realNames.length > 0
+        ? realNames[i % realNames.length]
+        : `${firstNames[i % firstNames.length]} ${lastNames[(i * 3 + clubRep) % lastNames.length]}`;
     return generateAIPlayer(clubId, pos, i, clubRep, name, nationality, agePool);
   });
 }
@@ -454,7 +458,7 @@ function nationalityForLeague(leagueName: LeagueName): string {
 }
 
 export function createClubFromApiTeam(
-  team: { id: number; name: string; shortName?: string; tla?: string; crest?: string },
+  team: { id: number; name: string; shortName?: string; tla?: string; crest?: string; players?: string[] },
   leagueName: LeagueName,
   position: number
 ): Club {
@@ -466,7 +470,14 @@ export function createClubFromApiTeam(
   const objectives = ['Win the league', 'European qualification', 'Cup success'];
   const nationality = nationalityForLeague(leagueName);
   const agePool = [25, 28, 24, 30, 22, 27, 26, 23, 29, 21, 31];
-  const squad = createSquad(String(team.id), reputation, [], nationality, agePool);
+  const squad = createSquad(
+    String(team.id),
+    reputation,
+    [],
+    nationality,
+    agePool,
+    team.players
+  );
 
   return {
     id: `api-${team.id}`,
