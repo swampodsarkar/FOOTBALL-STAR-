@@ -46,7 +46,7 @@ export default function SplashPage() {
         transition={{ delay: 0.4, duration: 0.6 }}
         className="mt-6 text-5xl md:text-7xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-300 bg-clip-text text-transparent"
       >
-        FOOTBALL CAREER
+        Football Star Pro
       </motion.h1>
 
       <motion.p
@@ -55,7 +55,7 @@ export default function SplashPage() {
         transition={{ delay: 0.7, duration: 0.5 }}
         className="mt-2 text-lg md:text-xl text-gray-500 font-light tracking-widest uppercase"
       >
-        Simulator 2026
+        Career Mode
       </motion.p>
 
       <motion.p

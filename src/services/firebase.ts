@@ -27,7 +27,7 @@ let app: FirebaseApp | null = null;
 
 function getApp(): FirebaseApp {
   if (!app) {
-    app = initializeApp(firebaseConfig, 'football-star');
+    app = initializeApp(firebaseConfig, 'football-star-pro');
   }
   return app;
 }

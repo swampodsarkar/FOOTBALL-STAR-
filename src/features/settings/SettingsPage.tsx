@@ -44,7 +44,7 @@ interface GameSettings {
   };
 }
 
-const STORAGE_KEY = 'football-career-settings';
+const STORAGE_KEY = 'football-star-pro-settings';
 
 const defaultSettings: GameSettings = {
   display: {
@@ -144,7 +144,7 @@ export default function SettingsPage() {
     const data: Record<string, unknown> = {};
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith('football-career-')) {
+      if (key?.startsWith('football-star-pro-')) {
         data[key] = JSON.parse(localStorage.getItem(key) ?? 'null');
       }
     }
@@ -152,7 +152,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `football-career-export-${Date.now()}.json`;
+    a.download = `football-star-pro-export-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -161,7 +161,7 @@ export default function SettingsPage() {
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith('football-career-save-')) {
+      if (key?.startsWith('football-star-pro-save-')) {
         keysToRemove.push(key);
       }
     }
@@ -170,7 +170,7 @@ export default function SettingsPage() {
   };
 
   const clearCache = () => {
-    const prefix = 'football-career-cache-';
+    const prefix = 'football-star-pro-cache-';
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);

@@ -29,10 +29,10 @@ export default function WelcomePage() {
     >
       <motion.div variants={itemVariants} className="text-center mb-12">
         <h1 className="text-5xl md:text-7xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-300 bg-clip-text text-transparent">
-          FOOTBALL CAREER
+          Football Star Pro
         </h1>
         <p className="mt-2 text-gray-500 tracking-widest text-sm uppercase">
-          Simulator 2026
+          Career Mode
         </p>
       </motion.div>
 

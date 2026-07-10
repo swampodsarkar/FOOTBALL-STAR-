@@ -350,7 +350,7 @@ export const useGameStore = create<GameState & GameActions>()(
           inbox: state.inbox,
         };
         localStorage.setItem(
-          `football-career-save-${state.player?.id ?? 'default'}`,
+          `football-star-pro-save-${state.player?.id ?? 'default'}`,
           JSON.stringify(saveData)
         );
         saveCloud(saveData);
@@ -380,7 +380,7 @@ export const useGameStore = create<GameState & GameActions>()(
       },
 
       loadGame: (saveId) => {
-        const raw = localStorage.getItem(`football-career-save-${saveId}`);
+        const raw = localStorage.getItem(`football-star-pro-save-${saveId}`);
         if (raw) {
           const data = JSON.parse(raw);
           set({
@@ -506,7 +506,7 @@ export const useGameStore = create<GameState & GameActions>()(
       },
     }),
     {
-      name: 'football-career-game',
+      name: 'football-star-pro-game',
       partialize: (state) => ({
         player: state.player,
         currentLeague: state.currentLeague,
