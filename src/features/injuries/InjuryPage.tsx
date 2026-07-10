@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   HiAcademicCap,
@@ -95,6 +95,12 @@ export default function InjuryPage() {
   const [injuryHistory] = useState(MOCK_INJURY_HISTORY);
 
   if (!player) return null;
+
+  useEffect(() => {
+    if (!(player.injury !== null && player.injury.weeksRemaining > 0)) {
+      goTo('home');
+    }
+  }, [player, goTo]);
 
   const isInjured = player.injury !== null && player.injury.weeksRemaining > 0;
   const injury = player.injury;

@@ -1,7 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import AppShell from '../components/layout/AppShell';
+import ErrorBoundary from '../components/ui/ErrorBoundary';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const SplashPage = lazy(() => import('../features/splash/SplashPage'));
 const WelcomePage = lazy(() => import('../features/welcome/WelcomePage'));
@@ -24,20 +26,15 @@ const SocialPage = lazy(() => import('../features/social/SocialPage'));
 const CareerTimelinePage = lazy(() => import('../features/careerTimeline/CareerTimelinePage'));
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
-function Loader() {
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ repeat: Infinity, duration: 1, ease: 'linear' as const }}
-        className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full"
-      />
-    </div>
-  );
-}
-
 function SuspenseWrapper({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<Loader />}>{children}</Suspense>;
+  const location = useLocation();
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Suspense fallback={<LoadingSpinner size="lg" label="Loading..." className="min-h-[60vh]" />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function CareerLayout({ children }: { children: ReactNode }) {

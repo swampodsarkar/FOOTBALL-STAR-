@@ -58,19 +58,8 @@ export default function SelectClubPage() {
   }, [clubs, sortBy]);
 
   const handleSign = () => {
-    console.log('=== Sign for Club Debug ===');
-    console.log('selectedClub:', selectedClub);
-    console.log('player:', player);
-    console.log('currentLeague:', currentLeague);
-    
-    if (!selectedClub || !player || !currentLeague) {
-      console.log('BLOCKED: selectedClub, player, or currentLeague is null');
-      return;
-    }
-    
-    console.log('Calling startNewCareer...');
+    if (!selectedClub || !player || !currentLeague) return;
     startNewCareer(player, currentLeague, selectedClub);
-    console.log('Navigating to home...');
     goTo('home');
   };
 

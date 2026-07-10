@@ -17,6 +17,7 @@ import { calculateMarketValue } from '../services/marketValue';
 import { useSimulationStore } from './simulationStore';
 import { isFIFAWindow, calculateSelectionScore, getCallUpStatus, resolveNationality, NATIONAL_TEAMS } from '../services/nationalTeamService';
 import { getQualification, getZoneAtPosition } from '../services/qualificationRules';
+import { processWeeklySalary, calculateExpenses } from '../simulation/economySystem';
 
 function getOrdinal(n: number): string {
   if (n >= 11 && n <= 13) return 'th';
@@ -308,7 +309,12 @@ export const useGameStore = create<GameState & GameActions>()(
 
         if (player) {
           const newMV = calculateMarketValue(player);
-          get().updatePlayer({ marketValue: newMV });
+          const salaried = processWeeklySalary({ ...player, marketValue: newMV });
+          const expenses = calculateExpenses(salaried.bankBalance);
+          get().updatePlayer({
+            marketValue: newMV,
+            bankBalance: salaried.bankBalance - expenses,
+          });
         }
 
         const lg = get().currentLeague;

@@ -30,6 +30,7 @@ import {
   type RatingEvent,
 } from '../../simulation/ratingSystem';
 import { calculateMarketValue } from '../../services/marketValue';
+import { processMatchBonus } from '../../simulation/economySystem';
 import type { MatchState, QTEResult, QTEType, MatchPerformance, MatchResult, Player } from '../../types';
 import { useSimulationStore } from '../../stores/simulationStore';
 
@@ -637,7 +638,11 @@ export default function MatchPage() {
           // Recalculate market value after match
           const updatedPlayerFull = { ...p, ...updatedPlayer };
           const newMarketValue = calculateMarketValue(updatedPlayerFull as Player);
-          st.updatePlayer({ marketValue: newMarketValue });
+          const withBonus = processMatchBonus(updatedPlayerFull as Player, perf);
+          st.updatePlayer({
+            marketValue: newMarketValue,
+            bankBalance: withBonus.bankBalance,
+          });
         }
 
           st.generateClubOffers();
