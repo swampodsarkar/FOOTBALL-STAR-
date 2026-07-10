@@ -31,16 +31,17 @@ If you are developing a production application, we recommend enabling type-aware
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
 
-## API key & real league logos
+## Data: baked at build time (no runtime API)
 
-The football-data.org key is **hardcoded** in `src/services/footballData.ts`, so
-the app works with no server or environment setup. football-data.org allows CORS,
-so the browser calls the API directly.
+All football-data.org data (league emblems, real club names + crests, and the
+season's fixtures) is fetched **once** by `scripts/fetchData.mjs` and saved to
+`src/data/realFootballData.json`. The app imports that file directly, so the
+deployed version makes **zero runtime API calls** — no CORS, no rate limits, no
+proxy, no service worker needed.
 
-Real league logos are fetched from football-data.org (`getLeagueLogos()`) and shown
-on the league-selection screen, falling back to country flags if a logo is missing.
+To refresh the data, run `node scripts/fetchData.mjs` (uses the key inside the
+script) and commit the updated JSON.
 
-> Note: because this is a pure frontend app, the hardcoded key is visible in the
-> built bundle (devtools). If you later want to hide it, move the calls behind a
-> serverless proxy.
+Real league logos come from the baked `emblem` field and are shown on the
+league-selection screen, falling back to country flags if missing.
 

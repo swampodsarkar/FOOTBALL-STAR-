@@ -1,9 +1,6 @@
+import realData from '../data/realFootballData.json';
 import type { Club, Fixture, League, LeagueName } from '../types';
 import { createClubFromApiTeam } from '../data/leagues';
-
-// All football-data.org calls go through the serverless proxy at /api/football
-// (see api/football.js). This avoids CORS and keeps the API key off the client.
-const BASE = '/api/football';
 
 export interface SupportedLeague {
   code: string;
@@ -26,78 +23,65 @@ export const SUPPORTED_LEAGUES: SupportedLeague[] = [
   { code: 'EC', name: 'European Championship', country: 'Europe', flag: '🇪🇺' },
 ];
 
-interface FdTeam {
+interface BakedTeam {
   id: number;
   name: string;
-  shortName?: string;
-  tla?: string;
-  crest?: string;
+  shortName?: string | null;
+  tla?: string | null;
+  crest?: string | null;
 }
 
-interface FdMatch {
+interface BakedMatch {
   id: number;
   utcDate: string;
   matchday?: number | null;
   status: string;
-  homeTeam: { id: number; name: string; crest?: string };
-  awayTeam: { id: number; name: string; crest?: string };
-  score?: { fullTime?: { home: number | null; away: number | null } };
+  homeTeam: { id: number; name: string; crest?: string | null };
+  awayTeam: { id: number; name: string; crest?: string | null };
+  score?: { fullTime?: { home: number | null; away: number | null } } | null;
 }
 
-// Cache emblems so we never re-hit the API for the same league (rate-limit safe).
-const emblemCache: Record<string, string> = {};
-
-// Retry on 429 (rate limit) with backoff; football-data.org throttles free keys.
-async function fdFetch<T>(path: string, retries = 4): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < retries; attempt++) {
-    const res = await fetch(`${BASE}${path}`);
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) {
-      lastErr = new Error(`football-data.org request failed: ${res.status} ${res.statusText}`);
-      break;
-    }
-    return res.json() as Promise<T>;
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('Request failed');
+// Real football-data.org data baked in at build time (see scripts/fetchData.mjs).
+// The deployed app makes NO runtime API calls — no CORS, no rate limits, no proxy.
+interface BakedLeague {
+  emblem: string | null;
+  teams: BakedTeam[];
+  matches: BakedMatch[];
 }
+const DATA = realData as Record<string, BakedLeague>;
 
-// Fetch real league logos (emblems) from football-data.org, one per league,
-// with caching + rate-limit retries. Missing logos fall back to flags in the UI.
+// Real league logos (emblems) baked from football-data.org.
 export async function getLeagueLogos(): Promise<Record<string, string>> {
-  const logos: Record<string, string> = { ...emblemCache };
+  const logos: Record<string, string> = {};
   for (const lg of SUPPORTED_LEAGUES) {
-    if (emblemCache[lg.code]) continue;
-    try {
-      const data = await fdFetch<{ emblem?: string | null }>(`/v4/competitions/${lg.code}`);
-      if (data.emblem) {
-        emblemCache[lg.code] = data.emblem;
-        logos[lg.code] = data.emblem;
-      }
-    } catch {
-      // keep flag fallback; skip this league's logo
-    }
+    const emblem = DATA[lg.code]?.emblem;
+    if (emblem) logos[lg.code] = emblem;
   }
   return logos;
 }
 
-export async function getTeams(code: string): Promise<Club[]> {
-  const data = await fdFetch<{ teams: FdTeam[] }>(`/v4/competitions/${code}/teams`);
+export async function buildRealLeague(code: string): Promise<League> {
   const meta = SUPPORTED_LEAGUES.find((l) => l.code === code);
   if (!meta) throw new Error(`Unsupported competition: ${code}`);
-  return data.teams.map((t, i) => createClubFromApiTeam(t, meta.name, i + 1));
-}
+  const data = DATA[code];
+  if (!data) throw new Error(`No baked data for: ${code}`);
 
-export async function getFixtures(code: string): Promise<Fixture[]> {
-  const data = await fdFetch<{ matches: FdMatch[] }>(`/v4/competitions/${code}/matches`);
-  const meta = SUPPORTED_LEAGUES.find((l) => l.code === code);
-  if (!meta) throw new Error(`Unsupported competition: ${code}`);
+  const clubs: Club[] = data.teams.map((t, i) =>
+    createClubFromApiTeam(
+      {
+        id: t.id,
+        name: t.name,
+        shortName: t.shortName ?? undefined,
+        tla: t.tla ?? undefined,
+        crest: t.crest ?? undefined,
+      },
+      meta.name,
+      i + 1
+    )
+  );
 
   const now = Date.now();
-  return data.matches
+  const fixtures: Fixture[] = data.matches
     .filter(
       (m) =>
         m.status !== 'FINISHED' &&
@@ -111,31 +95,13 @@ export async function getFixtures(code: string): Promise<Fixture[]> {
       matchday: m.matchday ?? null,
       utcDate: m.utcDate,
       competition: meta.name,
-      homeTeam: { id: m.homeTeam.id, name: m.homeTeam.name, crest: m.homeTeam.crest },
-      awayTeam: { id: m.awayTeam.id, name: m.awayTeam.name, crest: m.awayTeam.crest },
+      homeTeam: { id: m.homeTeam.id, name: m.homeTeam.name, crest: m.homeTeam.crest ?? undefined },
+      awayTeam: { id: m.awayTeam.id, name: m.awayTeam.name, crest: m.awayTeam.crest ?? undefined },
       status: m.status,
       homeScore: m.score?.fullTime?.home ?? null,
       awayScore: m.score?.fullTime?.away ?? null,
     }));
-}
 
-export async function buildRealLeague(code: string): Promise<League> {
-  const meta = SUPPORTED_LEAGUES.find((l) => l.code === code);
-  if (!meta) throw new Error(`Unsupported competition: ${code}`);
-  const clubs = await getTeams(code);
-  const fixtures = await getFixtures(code);
-  let emblem: string | undefined = emblemCache[code];
-  if (!emblem) {
-    try {
-      const data = await fdFetch<{ emblem?: string | null }>(`/v4/competitions/${code}`);
-      if (data.emblem) {
-        emblemCache[code] = data.emblem;
-        emblem = data.emblem;
-      }
-    } catch {
-      /* keep undefined; UI/logo fallback handles it */
-    }
-  }
   return {
     name: meta.name,
     country: meta.country,
@@ -143,6 +109,6 @@ export async function buildRealLeague(code: string): Promise<League> {
     tier: 1,
     clubs,
     fixtures,
-    emblem,
+    emblem: data.emblem ?? undefined,
   };
 }
