@@ -7,6 +7,10 @@ import {
   HiCalendar,
   HiAcademicCap,
   HiBolt,
+  HiSpeakerWave,
+  HiSpeakerXMark,
+  HiPause,
+  HiPlay,
 } from 'react-icons/hi2';
 import { useGameStore } from '../../stores/gameStore';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
@@ -16,6 +20,9 @@ import Badge from '../../components/ui/Badge';
 import ProgressBar from '../../components/ui/ProgressBar';
 import Button from '../../components/ui/Button';
 import PageTransition from '../../components/layout/PageTransition';
+import ClubCrest from '../../components/ui/ClubCrest';
+import PitchCanvas, { type PitchHandle } from '../../components/match/PitchCanvas';
+import QTEOverlay from '../../components/match/QTEOverlay';
 import {
   playerRelevantAttribute,
   playerTeamStrength,
@@ -32,8 +39,18 @@ import {
 } from '../../simulation/ratingSystem';
 import { calculateMarketValue } from '../../services/marketValue';
 import { processMatchBonus } from '../../simulation/economySystem';
+import {
+  speak,
+  playWhistle,
+  playGoalCheer,
+  playKick,
+  playCard,
+  setMatchAudioMuted,
+} from '../../utils/matchAudio';
 import type { MatchState, QTEResult, QTEType, MatchPerformance, MatchResult, Player } from '../../types';
 import { useSimulationStore } from '../../stores/simulationStore';
+
+const SPEED_MS: Record<number, number> = { 1: 700, 2: 350, 4: 175 };
 
 const QTE_TYPES_BY_POSITION: Record<string, QTEType[]> = {
   GK: ['GoalkeeperSave'],
@@ -154,27 +171,6 @@ function formatMinute(m: number): string {
   return `${Math.floor(m)}:${String(Math.round((m % 1) * 60)).padStart(2, '0')}`;
 }
 
-function QTEResultOverlay({ result }: { result: QTEResult }) {
-  const config: Record<QTEResult, { label: string; color: string; emoji: string }> = {
-    Perfect: { label: 'PERFECT!', color: 'text-amber-400', emoji: '⭐⭐⭐' },
-    Great: { label: 'GREAT!', color: 'text-emerald-400', emoji: '⭐⭐' },
-    Good: { label: 'GOOD', color: 'text-blue-400', emoji: '⭐' },
-    Late: { label: 'LATE', color: 'text-orange-400', emoji: '⚠' },
-    Miss: { label: 'MISS!', color: 'text-rose-400', emoji: '✕' },
-  };
-  const c = config[result];
-  return (
-    <motion.div
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      className={`text-center ${c.color}`}
-    >
-      <p className="text-6xl font-black">{c.emoji}</p>
-      <p className="text-4xl font-black mt-2">{c.label}</p>
-    </motion.div>
-  );
-}
-
 export default function MatchPage() {
   const player = useGameStore((s) => s.player);
   const currentClub = useGameStore((s) => s.currentClub);
@@ -205,10 +201,7 @@ export default function MatchPage() {
   const resetMatch = useMatchStore((s) => s.resetMatch);
 
   const [showQTE, setShowQTE] = useState(false);
-  const [qtePosition, setQtePosition] = useState(0);
   const [qteType, setQteType] = useState<QTEType>('Finish');
-  const [qteResult, setQteResult] = useState<QTEResult | null>(null);
-  const [qteResolved, setQteResolved] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [matchTime, setMatchTime] = useState(0);
   const [playerGoals, setPlayerGoals] = useState(0);
@@ -227,18 +220,50 @@ export default function MatchPage() {
     playerRating: BASE_RATING,
   });
   const [motmAwarded, setMotmAwarded] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [speed, setSpeed] = useState<number>(1);
+  const [muted, setMuted] = useState(false);
+  const [shake, setShake] = useState(false);
 
-  const commentaryRef = useRef<HTMLDivElement>(null);
+  const pitchRef = useRef<PitchHandle | null>(null);
   const matchIntervalRef = useRef<number | null>(null);
   const advanceRef = useRef<number | null>(null);
-  const qteAnimRef = useRef<number | null>(null);
-  const qteStartRef = useRef(0);
+
+  const isLiveRef = useRef(false);
+  const halfTimeRef = useRef(false);
+  const fullTimeRef = useRef(false);
+  const showQTERef = useRef(false);
+  const qteResolvedRef = useRef(false);
+  const energyUsedRef = useRef(0);
+  const scoreRef = useRef(score);
+  const playerGoalsRef = useRef(playerGoals);
+  const playerAssistsRef = useRef(playerAssists);
 
   useEffect(() => {
-    if (!player || !currentClub || !nextMatch) return;
+    scoreRef.current = score;
+    playerGoalsRef.current = playerGoals;
+    playerAssistsRef.current = playerAssists;
+  }, [score, playerGoals, playerAssists]);
 
+  const isHome = nextMatch?.isHome ?? true;
+  const playerTeamColor = currentClub?.colors?.primary ?? '#6366f1';
+  const oppColor = opponentClub?.colors?.primary ?? '#9ca3af';
+  const homeColor = isHome ? playerTeamColor : oppColor;
+  const awayColor = isHome ? oppColor : playerTeamColor;
+  const playerTeam: 'home' | 'away' = isHome ? 'home' : 'away';
+
+  useEffect(() => { setMatchAudioMuted(muted); }, [muted]);
+
+  const triggerShake = useCallback(() => {
+    setShake(true);
+    window.setTimeout(() => setShake(false), 550);
+  }, []);
+
+  const beginMatch = useCallback(() => {
+    if (!player || !currentClub || !nextMatch) return;
     setPlayerGoals(0);
     setPlayerAssists(0);
+    energyUsedRef.current = 0;
 
     const initState: MatchState = {
       minute: 0,
@@ -252,9 +277,9 @@ export default function MatchPage() {
       shots: { home: 0, away: 0 },
       passAccuracy: { home: 85, away: 83 },
       playerEnergy: player.physical.energy,
-    playerRating: BASE_RATING,
+      playerRating: BASE_RATING,
       commentary: 'The match is about to begin!',
-      isPlayerTeam: nextMatch.isHome ? 'home' : 'away',
+      isPlayerTeam: playerTeam,
       qteEvents: [],
       currentQTE: null,
       isLive: true,
@@ -266,50 +291,20 @@ export default function MatchPage() {
     startMatch(initState);
     addCommentary(`Kick off at ${initState.competition}! ${initState.homeTeam} vs ${initState.awayTeam}`);
     addCommentary(`The referee blows the whistle! We are underway!`);
+    pitchRef.current?.kickoff();
+    playWhistle();
+    speak(`Kick off. ${currentClub.name} versus ${nextMatch.opponent}.`, true);
+  }, [player, currentClub, nextMatch, playerTeam, startMatch, addCommentary]);
 
-    return () => {
-      resetMatch();
-    };
+  useEffect(() => {
+    beginMatch();
+    return () => { resetMatch(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const triggerQTE = useCallback(() => {
-    const posTypes = QTE_TYPES_BY_POSITION[player?.position ?? 'ST'] || ['Finish'];
-    setQteType(posTypes[Math.floor(Math.random() * posTypes.length)]);
-    setQtePosition(50);
-    setQteResult(null);
-    setQteResolved(false);
-    setShowQTE(true);
-    qteStartRef.current = performance.now();
-
-    const duration = 2500;
-    let startPos = -10;
-
-    if (qteAnimRef.current) cancelAnimationFrame(qteAnimRef.current);
-
-    const animate = (now: number) => {
-      const elapsed = now - qteStartRef.current;
-      const progress = (elapsed % duration) / duration;
-      const pos = startPos + (110 * progress);
-      setQtePosition(clamp(pos, -10, 100));
-      qteAnimRef.current = requestAnimationFrame(animate);
-    };
-    qteAnimRef.current = requestAnimationFrame(animate);
-  }, []);
-
-  const handleQTEClick = useCallback(() => {
-    if (qteResolved || !showQTE) return;
-    if (qteAnimRef.current) cancelAnimationFrame(qteAnimRef.current);
-
-    const pos = qtePosition;
-    let result: QTEResult;
-    if (pos >= 42 && pos <= 58) result = 'Perfect';
-    else if (pos >= 35 && pos <= 65) result = 'Great';
-    else if (pos >= 25 && pos <= 75) result = 'Good';
-    else if (pos >= 15 && pos <= 85) result = 'Late';
-    else result = 'Miss';
-
-    setQteResult(result);
-    setQteResolved(true);
+  const resolveQTE = useCallback((result: QTEResult) => {
+    if (qteResolvedRef.current) return;
+    qteResolvedRef.current = true;
 
     const skill = player ? playerRelevantAttribute(player, qteType) : 70;
     const difficulty = matchState?.currentQTE?.difficulty ?? 5;
@@ -318,17 +313,22 @@ export default function MatchPage() {
     addCommentary(`${player?.name ?? 'Player'} ${result === 'Perfect' ? 'with a perfect' : result === 'Great' ? 'with a great' : result === 'Good' ? 'manages a' : result === 'Late' ? 'late' : 'misses the'} ${qteType} effort!`);
 
     if (outcome.didScore) {
-      const homeScored = nextMatch?.isHome ?? true;
       setPlayerGoals((g) => g + 1);
-      setScore((s) => homeScored ? { ...s, home: s.home + 1 } : { ...s, away: s.away + 1 });
+      setScore((s) => playerTeam === 'home' ? { ...s, home: s.home + 1 } : { ...s, away: s.away + 1 });
       addMatchEvent({
         minute: Math.floor(matchTime),
         type: 'Goal',
         playerName: player?.name ?? '',
         description: `GOAL! ${player?.name} ${qteType === 'Header' ? 'heads' : qteType === 'Penalty' ? 'converts the penalty' : qteType === 'Volley' ? 'volleys' : qteType === 'Cross' ? 'crosses for a finish' : 'finishes'} brilliantly!`,
-        team: homeScored ? 'home' : 'away',
+        team: playerTeam,
       });
-      addCommentary(`${player?.name} ${qteType === 'Header' ? 'powers a header' : qteType === 'Penalty' ? 'slots the penalty away' : qteType === 'Cross' ? 'whips in a cross that is tapped in' : qteType === 'Volley' ? 'volleys home' : 'finishes with class'} — GOAL for ${homeScored ? currentClub?.name ?? 'your team' : nextMatch?.opponent ?? 'Opponent'}!`);
+      pitchRef.current?.goal(playerTeam);
+      playGoalCheer();
+      triggerShake();
+      addCommentary(`GOAL! ${player?.name} ${qteType === 'Header' ? 'powers a header' : qteType === 'Penalty' ? 'slots the penalty away' : qteType === 'Cross' ? 'whips in a cross that is tapped in' : qteType === 'Volley' ? 'volleys home' : 'finishes with class'} — GOAL for ${playerTeam === 'home' ? currentClub?.name ?? 'your team' : nextMatch?.opponent ?? 'Opponent'}!`);
+      speak(`Goal! ${player?.name}.`);
+    } else {
+      playKick();
     }
 
     setStats((s) => ({
@@ -337,39 +337,53 @@ export default function MatchPage() {
       momentum: clamp(s.momentum + outcome.momentumBoost, 0, 100),
     }));
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       setShowQTE(false);
-      setQteResult(null);
-    }, 1500);
-  }, [qtePosition, qteResolved, showQTE, player, nextMatch, matchTime, addCommentary, addMatchEvent]);
+      showQTERef.current = false;
+      qteResolvedRef.current = false;
+    }, 1200);
+  }, [player, qteType, matchState, matchTime, playerTeam, currentClub, nextMatch, addCommentary, addMatchEvent, triggerShake]);
 
-  const isLiveRef = useRef(matchState?.isLive ?? false);
-  const halfTimeRef = useRef(false);
-  const fullTimeRef = useRef(false);
-  const showQTERef = useRef(false);
+  const triggerQTE = useCallback(() => {
+    if (qteResolvedRef.current) return;
+    const posTypes = QTE_TYPES_BY_POSITION[player?.position ?? 'ST'] || ['Finish'];
+    const type = posTypes[Math.floor(Math.random() * posTypes.length)];
+    setQteType(type);
+    setShowQTE(true);
+    showQTERef.current = true;
+    pitchRef.current?.attack(playerTeam);
+    playKick();
+  }, [player, playerTeam]);
+
+  useEffect(() => { isLiveRef.current = matchState?.isLive ?? false; }, [matchState?.isLive]);
+  useEffect(() => { halfTimeRef.current = isHalfTime; }, [isHalfTime]);
+  useEffect(() => { fullTimeRef.current = isFullTime; }, [isFullTime]);
 
   useEffect(() => {
-    isLiveRef.current = matchState?.isLive ?? false;
+    const onKey = (e: KeyboardEvent) => {
+      if (showQTERef.current) return;
+      if (!matchState?.isLive) return;
+      if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); }
+      else if (e.key === '1') setSpeed(1);
+      else if (e.key === '2') setSpeed(2);
+      else if (e.key === '4') setSpeed(4);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [matchState?.isLive]);
 
   useEffect(() => {
-    halfTimeRef.current = isHalfTime;
-  }, [isHalfTime]);
-
-  useEffect(() => {
-    fullTimeRef.current = isFullTime;
-  }, [isFullTime]);
-
-  useEffect(() => {
-    showQTERef.current = showQTE;
-  }, [showQTE]);
-
-  useEffect(() => {
+    if (paused) {
+      if (matchIntervalRef.current) { clearInterval(matchIntervalRef.current); matchIntervalRef.current = null; }
+      return;
+    }
     if (!matchState?.isLive) return;
 
-    const speed = 700;
+    const speedMs = SPEED_MS[speed] ?? 700;
 
     matchIntervalRef.current = window.setInterval(() => {
+      if (showQTERef.current) return;
+
       setMatchTime((prev) => {
         if (fullTimeRef.current) return prev;
         const adv = randInt(1, 2);
@@ -379,6 +393,8 @@ export default function MatchPage() {
           setIsHalfTime(true);
           halfTimeRef.current = true;
           addCommentary('Half time! The teams head to the tunnel.');
+          playWhistle(true);
+          speak('Half time.');
           return 45;
         }
 
@@ -389,14 +405,14 @@ export default function MatchPage() {
           fullTimeRef.current = true;
           setIsHalfTime(false);
           addCommentary('The final whistle goes! Full time!');
+          playWhistle(true);
           updateMatchState({ isLive: false, isFullTime: true, minute: newMinute });
-          // Compute final rating immediately
           const isGK = player?.position === 'GK';
           const result: MatchResult =
-            score.home > score.away ? 'Win' : score.home < score.away ? 'Loss' : 'Draw';
-          const rawEvents = generateMatchEvents(playerGoals, playerAssists, player?.position ?? 'ST', isGK, result);
+            scoreRef.current.home > scoreRef.current.away ? 'Win' : scoreRef.current.home < scoreRef.current.away ? 'Loss' : 'Draw';
+          const rawEvents = generateMatchEvents(playerGoalsRef.current, playerAssistsRef.current, player?.position ?? 'ST', isGK, result);
           let rating = applyRatingEvents(rawEvents);
-          const motm = determineMOTM(rating, playerGoals, result, player?.name ?? '');
+          const motm = determineMOTM(rating, playerGoalsRef.current, result, player?.name ?? '');
           if (motm) {
             rawEvents.push({ type: 'playerOfMatch', count: 1 });
             rating = applyRatingEvents(rawEvents);
@@ -413,13 +429,15 @@ export default function MatchPage() {
           halfTimeRef.current = false;
           setMatchTime(45);
           addCommentary('The second half is underway!');
+          playWhistle();
           return 45;
         }
 
+        const tacticProb = clamp(playerTeamScoreProb, 0.05, 0.95);
         const eventRoll = Math.random();
 
         if (eventRoll < 0.035) {
-          const scored = Math.random() < playerTeamScoreProb;
+          const scored = Math.random() < tacticProb;
           if (scored) {
             const playerScores = Math.random() < playerGoalShare;
             if (playerScores) {
@@ -433,6 +451,9 @@ export default function MatchPage() {
                 momentum: clamp(s.momentum + 8, 0, 100),
                 playerRating: clamp(s.playerRating + 0.25, 6.0, 10.0),
               }));
+              pitchRef.current?.goal('home');
+              playGoalCheer();
+              triggerShake();
               addMatchEvent({
                 minute: newMinute,
                 type: 'Goal',
@@ -441,6 +462,7 @@ export default function MatchPage() {
                 team: 'home',
               });
               addCommentary(`GOAL! ${scorer} finds the net for ${currentClub?.name ?? 'your team'}! A fine finish!`);
+              speak(`Goal! ${scorer}.`);
             } else {
               setPlayerAssists((a) => a + 1);
               const scorer = randomTeammate();
@@ -452,6 +474,9 @@ export default function MatchPage() {
                 momentum: clamp(s.momentum + 6, 0, 100),
                 playerRating: clamp(s.playerRating + 0.12, 6.0, 10.0),
               }));
+              pitchRef.current?.goal('home');
+              playGoalCheer();
+              triggerShake();
               addMatchEvent({
                 minute: newMinute,
                 type: 'Goal',
@@ -471,6 +496,9 @@ export default function MatchPage() {
               momentum: clamp(s.momentum - 8, 0, 100),
               playerRating: clamp(s.playerRating - 0.05, 6.0, 10.0),
             }));
+            pitchRef.current?.goal('away');
+            playGoalCheer();
+            triggerShake();
             addMatchEvent({
               minute: newMinute,
               type: 'Goal',
@@ -482,6 +510,8 @@ export default function MatchPage() {
           }
         } else if (eventRoll < 0.1) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'chance'));
+          pitchRef.current?.attack('home');
+          playKick();
           setStats((s) => ({
             ...s,
             shots: { ...s.shots, home: s.shots.home + 1 },
@@ -489,47 +519,77 @@ export default function MatchPage() {
           }));
         } else if (eventRoll < 0.13 && !showQTERef.current) {
           triggerQTE();
-        } else if (eventRoll < 0.2) {
+          return prev;
+        } else if (eventRoll < 0.16) {
+          const isRed = Math.random() < 0.1;
+          const who = Math.random() < 0.5 ? (player?.name ?? 'Player') : (nextMatch?.opponent ?? 'Opponent');
+          addCommentary(generateCommentary(who, 'card'));
+          playCard();
+          addMatchEvent({
+            minute: newMinute,
+            type: isRed ? 'Red' : 'Yellow',
+            playerName: who,
+            description: isRed ? `${who} is shown a red card!` : `${who} receives a yellow card.`,
+            team: 'home',
+          });
+        } else if (eventRoll < 0.23) {
           const cat = pick(['foul', 'corner', 'offside'] as const);
-          addCommentary(generateCommentary(Math.random() < 0.5 ? (player?.name ?? 'Player') : (nextMatch?.opponent ?? 'Opponent'), cat));
-        } else if (eventRoll < 0.35) {
+          const who = Math.random() < 0.5 ? (player?.name ?? 'Player') : (nextMatch?.opponent ?? 'Opponent');
+          addCommentary(generateCommentary(who, cat));
+          pitchRef.current?.attack(Math.random() < 0.5 ? 'home' : 'away');
+        } else if (eventRoll < 0.38) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'attack'));
-        } else if (eventRoll < 0.45) {
+          pitchRef.current?.attack('home');
+        } else if (eventRoll < 0.48) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'defense'));
-        } else if (eventRoll < 0.6) {
+          pitchRef.current?.attack('away');
+        } else if (eventRoll < 0.63) {
           addCommentary(pick(COMMENTARY_POOL.neutral));
-        } else if (eventRoll < 0.65) {
+        } else if (eventRoll < 0.68) {
           addCommentary(generateCommentary(player?.name ?? 'Player', 'stat'));
         }
 
+        energyUsedRef.current = Math.min(
+          player?.physical.energy ?? 100,
+          energyUsedRef.current + randInt(0, 2) + 1,
+        );
         const momentumShift = (Math.random() - 0.5) * 6;
         setStats((s) => ({
           ...s,
           momentum: clamp(s.momentum + momentumShift, 0, 100),
-          possession: { home: clamp(50 + (Math.random() - 0.5) * 10, 35, 65), away: 100 - clamp(50 + (Math.random() - 0.5) * 10, 35, 65) },
+            possession: {
+              home: clamp(50 + (Math.random() - 0.5) * 10, 35, 65),
+              away: 100 - clamp(50 + (Math.random() - 0.5) * 10, 35, 65),
+            },
           passAccuracy: {
             home: clamp(85 + randInt(-3, 3), 70, 95),
             away: clamp(83 + randInt(-3, 3), 70, 95),
           },
           playerRating: clamp(s.playerRating + (Math.random() - 0.5) * 0.06, 6.0, 10.0),
         }));
+        pitchRef.current?.setPossession(
+          clamp(50 + (Math.random() - 0.5) * 10, 35, 65),
+        );
+        pitchRef.current?.setMomentum(stats.momentum);
 
         updateMatchState({ minute: newMinute });
 
         return newMinute;
       });
-    }, speed);
+    }, speedMs);
 
     return () => {
-      if (matchIntervalRef.current) clearInterval(matchIntervalRef.current);
+      if (matchIntervalRef.current) { clearInterval(matchIntervalRef.current); matchIntervalRef.current = null; }
     };
-  }, [matchState?.isLive, triggerQTE]);
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused, speed, matchState?.isLive, triggerQTE, playerTeamScoreProb, player, currentClub, nextMatch, playerGoalShare, randomTeammate, addCommentary, addMatchEvent, updateMatchState, triggerShake]);
   useEffect(() => {
-    if (commentaryRef.current) {
+    if (commentary.length > 0 && commentaryRef.current) {
       commentaryRef.current.scrollTop = commentaryRef.current.scrollHeight;
     }
   }, [commentary]);
+
+  const commentaryRef = useRef<HTMLDivElement>(null);
 
   function generateMatchEvents(
     goals: number,
@@ -574,12 +634,10 @@ export default function MatchPage() {
     if (defendingPositions.includes(pos) && goals === 0 && (matchResult === 'Win' || matchResult === 'Draw')) {
       events.push({ type: 'cleanSheet', count: 1 });
     }
-
     return events;
   }
 
   function determineMOTM(rating: number, _goals: number, result: MatchResult, _playerName: string): boolean {
-    // Generate AI player performances for comparison
     const aiCount = 20 + randInt(0, 6);
     const aiRatings: number[] = [];
     for (let i = 0; i < aiCount; i++) {
@@ -591,7 +649,6 @@ export default function MatchPage() {
     }
     aiRatings.push(rating);
     aiRatings.sort((a, b) => b - a);
-    // MOTM only if the player is the top performer (or tied for top) AND rating >= 7.5
     const isTop = aiRatings[0] === rating;
     return isTop && rating >= 7.5;
   }
@@ -693,22 +750,21 @@ export default function MatchPage() {
           });
         }
 
-          st.generateClubOffers();
+        st.generateClubOffers();
 
-          const sim = useSimulationStore.getState();
-          const isHome = matchState?.isPlayerTeam === 'home';
-          const homeGoals = isHome ? score.home : score.away;
-          const awayGoals = isHome ? score.away : score.home;
-          sim.recordPlayerMatch({
-            leagueName: currentLeague?.name ?? '',
-            clubId: currentClub?.id ?? '',
-            opponentName: nextMatch?.opponent ?? '',
-            isHome: isHome,
-            homeGoals,
-            awayGoals,
-          });
+        const sim = useSimulationStore.getState();
+        const homeGoals = isHome ? score.home : score.away;
+        const awayGoals = isHome ? score.away : score.home;
+        sim.recordPlayerMatch({
+          leagueName: currentLeague?.name ?? '',
+          clubId: currentClub?.id ?? '',
+          opponentName: nextMatch?.opponent ?? '',
+          isHome,
+          homeGoals,
+          awayGoals,
+        });
 
-          st.advanceWeek();
+        st.advanceWeek();
         st.scheduleNextMatch();
         endMatch();
         goTo('home');
@@ -717,9 +773,12 @@ export default function MatchPage() {
     return () => {
       if (advanceRef.current) clearTimeout(advanceRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showResult]);
 
-  if (!matchState || !player) return null;
+  if (!player) return null;
+
+  if (!matchState) return null;
 
   return (
     <PageTransition>
@@ -736,8 +795,46 @@ export default function MatchPage() {
                   <HiTrophy className="w-4 h-4 text-indigo-400" />
                   <span className="text-sm text-indigo-400 font-semibold uppercase tracking-wider">{matchState.competition}</span>
                 </div>
-                <Badge variant="info">{isHalfTime ? 'Half Time' : isFullTime ? 'Full Time' : 'LIVE'}</Badge>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMuted((m) => !m)}
+                    title={muted ? 'Unmute' : 'Mute'}
+                    className="w-8 h-8 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white"
+                  >
+                    {muted ? <HiSpeakerXMark className="w-4 h-4" /> : <HiSpeakerWave className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => setPaused((p) => !p)}
+                    title={paused ? 'Resume' : 'Pause'}
+                    className="w-8 h-8 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-40"
+                  >
+                    {paused ? <HiPlay className="w-4 h-4" /> : <HiPause className="w-4 h-4" />}
+                  </button>
+                  <div className="flex rounded-full bg-gray-900 border border-gray-800 overflow-hidden">
+                    {[1, 2, 4].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setSpeed(s)}
+                        className={`px-2 py-1 text-xs font-bold ${speed === s ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        {s}x
+                      </button>
+                    ))}
+                  </div>
+                  <Badge variant="info">{isHalfTime ? 'Half Time' : isFullTime ? 'Full Time' : paused ? 'Paused' : 'LIVE'}</Badge>
+                </div>
               </motion.div>
+
+              <div className={`rounded-2xl overflow-hidden ${shake ? 'pitch-shake' : ''}`}>
+                  <PitchCanvas
+                    ref={pitchRef}
+                    homeColor={homeColor}
+                    awayColor={awayColor}
+                    homeFormation={'4-3-3'}
+                    awayFormation={'4-3-3'}
+                    playerIsHome={isHome}
+                  />
+              </div>
 
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -745,16 +842,18 @@ export default function MatchPage() {
                 className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 text-center"
               >
                 <div className="flex items-center justify-center gap-6 mb-4">
-                  <div className="flex-1 text-right">
-                    <p className="text-lg font-bold text-white">{currentClub?.name ?? 'your team'}</p>
+                  <div className="flex-1 flex items-center justify-end gap-3">
+                    <ClubCrest club={isHome ? currentClub : opponentClub} name={matchState.homeTeam} color={homeColor} size={28} />
+                    <p className="text-lg font-bold text-white">{matchState.homeTeam}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-5xl font-black text-white">{score.home}</span>
                     <span className="text-2xl text-gray-600">-</span>
                     <span className="text-5xl font-black text-white">{score.away}</span>
                   </div>
-                  <div className="flex-1 text-left">
-                    <p className="text-lg font-bold text-white">{nextMatch?.opponent ?? 'Opponent'}</p>
+                  <div className="flex-1 flex items-center justify-start gap-3">
+                    <p className="text-lg font-bold text-white">{matchState.awayTeam}</p>
+                    <ClubCrest club={isHome ? opponentClub : currentClub} name={matchState.awayTeam} color={awayColor} size={28} />
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-2">
@@ -787,9 +886,9 @@ export default function MatchPage() {
               <Card>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>{currentClub?.name ?? 'your team'}</span>
+                    <span>{matchState.homeTeam}</span>
                     <span className="font-semibold text-indigo-400">MOMENTUM</span>
-                    <span>{nextMatch?.opponent ?? 'Opponent'}</span>
+                    <span>{matchState.awayTeam}</span>
                   </div>
                   <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
                     <motion.div
@@ -872,16 +971,18 @@ export default function MatchPage() {
                   <HiTrophy className="w-12 h-12 text-amber-400 mx-auto" />
                   <p className="text-sm text-indigo-400 uppercase tracking-wider font-semibold">{matchState.competition}</p>
                   <div className="flex items-center justify-center gap-4">
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-white">{currentClub?.name ?? 'your team'}</p>
+                    <div className="flex items-center gap-2">
+                      <ClubCrest club={isHome ? currentClub : opponentClub} name={matchState.homeTeam} color={homeColor} size={24} />
+                      <p className="text-lg font-bold text-white">{matchState.homeTeam}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-6xl font-black text-white">{score.home}</span>
                       <span className="text-2xl text-gray-600">-</span>
                       <span className="text-6xl font-black text-white">{score.away}</span>
                     </div>
-                    <div className="text-left">
-                      <p className="text-lg font-bold text-white">{nextMatch?.opponent ?? 'Opponent'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-white">{matchState.awayTeam}</p>
+                      <ClubCrest club={isHome ? opponentClub : currentClub} name={matchState.awayTeam} color={awayColor} size={24} />
                     </div>
                   </div>
                   <div className="border-t border-gray-800 pt-4 space-y-2">
@@ -907,7 +1008,7 @@ export default function MatchPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Energy Used</span>
-                      <span className="text-rose-400 font-semibold">{Math.round(player.physical.energy - (computedFinalRating > 0 ? computedFinalRating * 5 : stats.playerRating * 5))}%</span>
+                      <span className="text-rose-400 font-semibold">{Math.round(energyUsedRef.current)}%</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">XP Earned</span>
@@ -938,62 +1039,7 @@ export default function MatchPage() {
 
         <AnimatePresence>
           {showQTE && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-              onClick={handleQTEClick}
-            >
-              <motion.div
-                initial={{ scale: 0.8, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.8, y: -20 }}
-                className="w-full max-w-lg mx-4"
-              >
-                <Card className="border-indigo-500/50">
-                  <div className="text-center space-y-6 py-4">
-                    <div className="space-y-1">
-                      <p className="text-2xl font-black bg-gradient-to-r from-amber-400 to-rose-400 bg-clip-text text-transparent">
-                        FINISHING CHANCE!
-                      </p>
-                      <p className="text-sm text-gray-500">Tap at the right moment</p>
-                    </div>
-
-                    <div className="relative h-16 bg-gray-800 rounded-xl overflow-hidden">
-                      <div className="absolute inset-0 flex">
-                        <div className="flex-1 bg-rose-500/30" />
-                        <div className="flex-1 bg-orange-500/30" />
-                        <div className="flex-1 bg-emerald-500/30" />
-                        <div className="flex-1 bg-amber-500/30" />
-                        <div className="flex-1 bg-rose-500/30" />
-                      </div>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="flex w-full h-full">
-                          <div className="flex-1 flex items-center justify-center text-xs text-rose-300 font-semibold">Miss</div>
-                          <div className="flex-1 flex items-center justify-center text-xs text-orange-300 font-semibold">Good</div>
-                          <div className="flex-1 flex items-center justify-center text-xs text-emerald-300 font-semibold">Great</div>
-                          <div className="flex-1 flex items-center justify-center text-xs text-amber-300 font-semibold">Perfect</div>
-                          <div className="flex-1 flex items-center justify-center text-xs text-rose-300 font-semibold">Miss</div>
-                        </div>
-                      </div>
-                      <motion.div
-                        animate={{ left: `${qtePosition}%` }}
-                        transition={{ duration: 0.05, ease: 'linear' as const }}
-                        className="absolute top-0 w-1 h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"
-                        style={{ transform: 'translateX(-50%)' }}
-                      />
-                    </div>
-
-                    <AnimatePresence>
-                      {qteResult && (
-                        <QTEResultOverlay result={qteResult} />
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </Card>
-              </motion.div>
-            </motion.div>
+            <QTEOverlay type={qteType} onResolve={resolveQTE} />
           )}
         </AnimatePresence>
       </div>
