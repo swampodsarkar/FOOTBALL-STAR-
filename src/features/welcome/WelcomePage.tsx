@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { HiPlay, HiFolderOpen, HiCog6Tooth } from 'react-icons/hi2';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Button from '../../components/ui/Button';
-import mainMenuBg from '../../assets/mainmenu-bg.png';
+import mainMenuBg from '../../assets/bd.png';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -26,14 +26,14 @@ export default function WelcomePage() {
       initial="hidden"
       animate="visible"
       exit={{ opacity: 0, y: -20 }}
-      className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-950 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-900 relative overflow-hidden"
     >
-      <div
-        className="absolute inset-0 -z-10 bg-cover bg-center"
-        style={{ backgroundImage: `url(${mainMenuBg})` }}
-      >
-        <div className="absolute inset-0 backdrop-blur-sm bg-gray-950/60" />
-      </div>
+      <img
+        src={mainMenuBg}
+        alt=""
+        className="absolute inset-0 -z-10 h-full w-full object-cover"
+        style={{ filter: 'blur(6px) brightness(0.45)', transform: 'scale(1.08)' }}
+      />
 
       <motion.div variants={itemVariants} className="text-center mb-12">
         <h1 className="text-5xl md:text-7xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-300 bg-clip-text text-transparent">
