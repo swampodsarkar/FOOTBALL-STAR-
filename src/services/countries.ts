@@ -46,3 +46,26 @@ export async function fetchCountry(name: string): Promise<CountryInfo | null> {
     return null;
   }
 }
+
+// Fetch the full list of countries (name + flag) from the REST Countries API.
+// Returns null on any failure so callers can fall back to the local list.
+export async function fetchAllCountries(): Promise<CountryInfo[] | null> {
+  try {
+    const resp = await fetch(`${BASE_URL}/all?access_key=${API_KEY}`, {
+      headers: { apikey: API_KEY },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!Array.isArray(data)) return null;
+    return data
+      .map((c: any) => ({
+        name: c.name?.common ?? '',
+        flag: c.flag ?? '',
+        flagPng: c.flags?.png ?? '',
+        flagSvg: c.flags?.svg ?? '',
+      }))
+      .filter((c: CountryInfo) => c.name);
+  } catch {
+    return null;
+  }
+}

@@ -98,9 +98,28 @@ const nationalTeams: Record<string, NationalTeamInfo> = {
   'Mexico': { country: 'Mexico', worldRanking: 12, manager: 'Jaime Lozano', confederation: 'CONCACAF' },
 };
 
+// Map REST Countries API names (e.g. "United Kingdom") back to the app's
+// canonical nationality keys so national-team data still resolves.
+const NATIONALITY_ALIASES: Record<string, string> = {
+  'United Kingdom': 'England',
+  'United States': 'USA',
+  'Czechia': 'Czech Republic',
+  'Russian Federation': 'Russia',
+  'Republic of Korea': 'South Korea',
+  'Korea Republic': 'South Korea',
+  'Iran, Islamic Republic of': 'Iran',
+  'Bolivia (Plurinational State of)': 'Bolivia',
+  'Venezuela (Bolivarian Republic of)': 'Venezuela',
+};
+
+function canonNationality(country: string): string {
+  return NATIONALITY_ALIASES[country] ?? country;
+}
+
 function getNationalTeam(country: string): NationalTeamInfo {
-  return nationalTeams[country] ?? {
-    country,
+  const key = canonNationality(country);
+  return nationalTeams[key] ?? {
+    country: key,
     worldRanking: 50,
     manager: 'Unknown',
     confederation: 'Other',
@@ -108,7 +127,7 @@ function getNationalTeam(country: string): NationalTeamInfo {
 }
 
 function getCountryFlag(country: string): string {
-  return countryFlags[country] ?? '🏳️';
+  return countryFlags[canonNationality(country)] ?? '🏳️';
 }
 
 const fixtures: Fixture[] = [

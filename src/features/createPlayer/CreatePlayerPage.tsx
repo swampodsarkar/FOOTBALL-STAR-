@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HiChevronLeft,
@@ -9,6 +9,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { usePhaseNavigation } from '../../utils/phaseNavigation';
 import Button from '../../components/ui/Button';
 import CountryFlag from '../../components/ui/CountryFlag';
+import { fetchAllCountries, type CountryInfo } from '../../services/countries';
 import type {
   Player,
   Position,
@@ -124,11 +125,33 @@ export default function CreatePlayerPage() {
   const [weight, setWeight] = useState(72);
   const [difficulty, setDifficulty] = useState<Difficulty>('Professional');
 
+  const [apiCountries, setApiCountries] = useState<CountryInfo[] | null>(null);
+
+  useEffect(() => {
+    fetchAllCountries().then(setApiCountries);
+  }, []);
+
+  const countryList = useMemo(() => {
+    if (apiCountries && apiCountries.length > 0) {
+      return apiCountries.map((c) => ({
+        country: c.name,
+        flag: c.flag,
+        flagPng: c.flagPng,
+      }));
+    }
+    return Object.entries(countryFlags).map(([country, flag]) => ({
+      country,
+      flag,
+      flagPng: undefined as string | undefined,
+    }));
+  }, [apiCountries]);
+
   const filteredCountries = useMemo(
-    () => Object.entries(countryFlags).filter(([c]) =>
-      c.toLowerCase().includes(nationalitySearch.toLowerCase())
-    ),
-    [nationalitySearch]
+    () =>
+      countryList.filter(({ country }) =>
+        country.toLowerCase().includes(nationalitySearch.toLowerCase())
+      ),
+    [countryList, nationalitySearch]
   );
 
   const canProceed = (): boolean => {
@@ -303,7 +326,7 @@ export default function CreatePlayerPage() {
                 className="w-full px-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors mb-3"
               />
               <div className="max-h-60 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-gray-800">
-                {filteredCountries.map(([country, flag]) => (
+                {filteredCountries.map(({ country, flag, flagPng }) => (
                   <button
                     key={country}
                     onClick={() => {
@@ -316,12 +339,21 @@ export default function CreatePlayerPage() {
                         : 'text-gray-400 hover:bg-gray-900 hover:text-white'
                     }`}
                   >
-                    <CountryFlag
-                      country={country}
-                      emoji={flag}
-                      className="text-lg"
-                      imgClassName="w-5 h-5 rounded-sm object-cover"
-                    />
+                    {flagPng ? (
+                      <img
+                        src={flagPng}
+                        alt={country}
+                        className="w-5 h-5 rounded-sm object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <CountryFlag
+                        country={country}
+                        emoji={flag}
+                        className="text-lg"
+                        imgClassName="w-5 h-5 rounded-sm object-cover"
+                      />
+                    )}
                     <span>{country}</span>
                   </button>
                 ))}
