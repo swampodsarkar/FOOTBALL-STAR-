@@ -32,7 +32,7 @@ export default function WelcomePage() {
         src={mainMenuBg}
         alt=""
         className="absolute inset-0 -z-10 h-full w-full object-cover"
-        style={{ filter: 'blur(6px) brightness(0.45)', transform: 'scale(1.08)' }}
+        style={{ filter: 'brightness(0.5)', transform: 'scale(1.02)' }}
       />
 
       <motion.div variants={itemVariants} className="text-center mb-12">
